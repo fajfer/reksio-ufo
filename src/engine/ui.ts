@@ -5,7 +5,7 @@ import { argValue, type Arg } from '../script/interpreter.ts';
 import { Value } from '../script/values.ts';
 import type { Engine } from './engine.ts';
 import { Font } from './fonts.ts';
-import { Graphic } from './media.ts';
+import { Graphic, ImageObj } from './media.ts';
 import { spriteAlphaAt } from './renderer.ts';
 import { GameObject } from './object.ts';
 import type { Drawable } from './renderer.ts';
@@ -182,8 +182,13 @@ export class Keyboard extends GameObject {
 export class CanvasObserver extends GameObject {
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
+    // SETBACKGROUND(name): an IMAGE object's picture, else a file (S47 uses both).
     this.method('SETBACKGROUND', (a) => {
-      void this.engine.setBackground(str(a[0]));
+      const name = str(a[0]);
+      const obj = this.engine.find(name);
+      const sprite = obj instanceof ImageObj ? (obj.sprite ?? (obj.cloneOf instanceof ImageObj ? obj.cloneOf.sprite : null)) : null;
+      if (sprite) this.engine.renderer.background = sprite;
+      else void this.engine.setBackground(name);
     });
     this.method('REFRESH', () => undefined);
     // GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority[, rectOnly]):
