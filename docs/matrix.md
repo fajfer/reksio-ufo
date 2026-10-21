@@ -114,8 +114,8 @@ record (setter 0x10004100, getter 0x10004110). Index `i = y*W + x`.
 | +0x10 | 0x10002c10 | moveXY((fx,fy),(tx,ty),state) -> moveOff(fy*W+fx, ty*W+tx, state) |
 | +0x14 | 0x10002cc0 | setOff(i, v): `code[i] = (byte)v` |
 | +0x18 | 0x10002ca0 | setXY(x, y, v): `code[y*W+x] = (byte)v` |
-| +0x1c | 0x10002ce0 | getXY(x, y) -> code[y*W+x] |
-| +0x20 | 0x10002d00 | getOff(i) -> code[i] |
+| +0x1c | 0x10002d00 | getOff(i) -> code[i]  (GET with 1 arg) |
+| +0x20 | 0x10002ce0 | getXY(x, y) -> code[y*W+x]  (GET with 2 args) |
 | +0x78 | 0x10003a50 | CLEAR |
 
 ### moveOff (0x10002c40)
@@ -179,3 +179,18 @@ return 0
 Events are fired by 0x10001f90: it looks up the behaviour named by the
 ONNEXT/ONLATEST property (owner vt+0x74 = getBehaviour) and runs it with three
 string params `[x, y, m]` (CXArray built with `CXString = int`) **[obs]**.
+
+### Simple accessors [obs]
+- GET(i) / GET(x,y): handler 0x10007e20 -> code byte, zero-extended, returned as INTEGER.
+- SET(i,v) / SET(x,y,v): handler 0x10006c90 -> `code[...] = v & 0xff`.
+- SETROW(y, v0, v1, ...): handler 0x10007ec0: for k=1..argc-1: setXY(k-1, y, arg[k]).
+- GETCELLSNO(): 0x10003240 -> W*H. GETCELLSNO(c): 0x10003250 -> count of cells with code == (byte)c.
+- GETCELLOFFSET(x,y): 0x100034b0 -> y*W + x (no clamping).
+- GETCELLOFFSETATPOS(px,py): 0x100034d0 -> cx=(px-baseX)/cellW, cy=(py-baseY)/cellH
+  (C truncating division); -1 if outside 0..W-1 / 0..H-1, else cy*W+cx.
+- GETCELLPOSX(i) 0x10003420 / GETCELLPOSX(x,y) 0x100032f0 -> cell pixel x = baseX + x*cellW.
+- GETCELLPOSY(i) 0x10003440 / GETCELLPOSY(x,y) 0x10003400 -> baseY + y*cellH.
+- GETWIDTH 0x10003a30, GETHEIGHT 0x10003a40.
+- SETGATE(l,t,r,b): 0x10002eb0 stores a CXRect at model+0x20 (+0x24 l, +0x28 t, +0x2c r, +0x30 b), in cell units.
+- ISGATEEMPTY(): 0x10002d10 -> false if any code==2 (boulder) in x=l..r, y=t..b inclusive, else true.
+- ISINGATE(x,y): 0x10002ed0 -> CXRect::IsInRect(x,y) (PIKLIB8); ISINGATE(i): 0x10002ef0 -> IsInRect(CXPoint(i%W, i/W)).

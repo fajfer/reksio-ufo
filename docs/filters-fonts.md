@@ -79,3 +79,9 @@ Status: in progress. "observed" = seen in DLL/scripts/data; "inferred" = guess.
 - `getKerning(a,b)` `0x100d3b30`: kern[N*idx(a) + idx(b)].
 - `drawLetter(prev, ch, x, y)` `0x100d3700`: for a found glyph i: srcX0 = i*gw + left[i]; w = gw - right[i] - left[i]; k = kern[N*prevIdx + i] (0 if no prev). Positions the whole atlas at (x - srcX0 - k, y) (vtable+0x64) and clips to atlas columns [srcX0, srcX0 + w) x [0, H), Redraw. So the glyph's visible columns land at screen x - k.
   Returns advance = w - k + 2 (space: width('l') + 2; '~': 3; unknown char: 2). I.e. a fixed 2px letter spacing on top of the trimmed glyph width.
+
+## DLL: TEXT layout (observed)
+- `CText6::getLength(font, str)` `0x100de5a0`: sum over chars of font.getLetterWidth(prevChar or 0, ch) + 2.
+- `CText6::Redraw` `0x100de000`: FONT objects hold a CFontCollection whose isMultifont (`0x10026110`) returns TRUE, so the multifont path is used: pen starts at text x (this+0x78 i.e. position), pen += font.drawLetter(pen, y, prev, ch) (return already includes +2; collection drawLetter `0x100260c0` forwards to the base CSimpleFont6). Same advance as getLength. (The non-multifont path at 0x100de393 adds a further +2; not used for FONT objects.) Opacity set to 0xff at the end.
+- `CText6::setJustify(rect, h, v)` `0x100de620`: h==0: x=rect.left; h==1: x=rect.right - width; h==2: x = left + (right-left-width)/2 (trunc toward 0). v==2: y = top + (bottom-top-height)/2; v==3: y=top; v==4: y = bottom - height. (Mapping of script strings LEFT/RIGHT/CENTER and VJUSTIFY=TRUE to these enum values: TODO, inferred TRUE => vertically centered.)
+- Width = getLength(text), Height = font height (atlas H).

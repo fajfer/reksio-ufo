@@ -88,10 +88,16 @@ PRIORITY. `createButton` (0x10055e00) then does the following — **observed**:
 
 ## SEQUENCE
 
-- Tree semantics are **inferred** from the data:
-  - PARAMETER nodes: `SEQEVENT:NAME = n` selects child n.
-  - SEQUENCE nodes play their children in order; RANDOM nodes play one child.
-  - SIMPLE leaves play an event on the scene ANIMO with the same FILENAME.
+- Tree nodes, `CSequencedPlayable::play` (0x100d0bc0) / `next` (0x100d1160) — **observed**:
+  - SEQUENCE mode plays the children in order; `next` advances when the
+    current child finishes.
+  - RANDOM mode plays child `rand() % n`.
+  - PARAMETER mode selects the child by the first character of the parameter:
+    `1`–`9` → child 0–8, `A`–`Z` → 9 onwards. SEQEVENT maps event names to
+    these numbers. All SEQEVENT values in this game are 1–9, so a numeric
+    lookup is equivalent.
+- SIMPLE leaves play an event on the scene ANIMO with the same FILENAME
+  (**inferred** binding).
 - SPEAKING leaves follow `CSpeakingAnimation` — **observed**:
   - `play` (0x100d6ee0): with STARTING it plays `PREFIX_START` first, and the
     WAV starts only when that finishes (`onPlayableFinished` 0x100d7290). With
