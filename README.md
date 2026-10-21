@@ -43,6 +43,10 @@ A service worker (`public/sw.js`) plus a web app manifest
   offers *Pobierz grę i graj offline*: every game file (plus the app shell)
   is copied into Cache Storage, after which the site boots and plays with no
   network at all. The button turns into *Usuń pobraną grę* once it is done.
+  The app shell alone is cached on the first online visit, so an installed
+  app always opens offline; the game itself then comes from the download.
+  iOS has no folder picker (`webkitdirectory`), so the boot panel hides it
+  and points at „Graj” / the offline download instead.
 
 Offline support is production-only: the dev server stays untouched (no
 service worker, no stale caches).

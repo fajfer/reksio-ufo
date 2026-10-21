@@ -90,7 +90,7 @@ const isSafariDesktop = /safari/i.test(ua) && !/chrome|chromium|crios|fxios|edg|
 
 const hint =
   standalone() ? null
-  : isIOS ? 'Aby zainstalować: Udostępnij → „Dodaj do ekranu początkowego”.'
+  : isIOS ? 'Aby zainstalować: Udostępnij → „Dodaj do ekranu początkowego”. Potem otwórz apkę i pobierz grę, by działała bez internetu.'
   : isFirefox && isAndroid ? 'Aby zainstalować: menu ⋮ → „Zainstaluj” (Dodaj do ekranu głównego).'
   : isFirefox ? 'Firefox na komputerze nie obsługuje instalowania aplikacji internetowych — użyj Chrome, Edge lub Safari.'
   : isSafariDesktop ? 'Aby zainstalować: w Safari 17+ menu Plik → „Dodaj do Docku”.'
@@ -100,13 +100,28 @@ if (hint) {
   installHint.hidden = false;
 }
 
+// iOS has no folder picker (<input webkitdirectory> is unsupported), so the
+// only ways to play there are the served install or the offline download.
+if (isIOS || !('webkitdirectory' in document.createElement('input'))) {
+  (document.getElementById('pick') as HTMLLabelElement).hidden = true;
+  const pickHint = document.getElementById('pick-hint') as HTMLDivElement;
+  pickHint.textContent = 'Na iPhonie/iPadzie nie można wskazać folderu gry — użyj przycisku „Graj” albo „Pobierz grę i graj offline”.';
+  pickHint.hidden = false;
+}
+
 // --- offline copy of the game ------------------------------------------------
 
 const supported = offline.supported() && import.meta.env.PROD;
 let offlineFs: HttpFS | null = null;
 let downloadAbort: AbortController | null = null;
 
-if (supported) offline.registerServiceWorker();
+if (supported) {
+  offline.registerServiceWorker();
+  // A service worker only takes control after it activates, so the first visit
+  // is not cached by it. Cache the app shell explicitly: an installed app (iOS
+  // "Add to Home Screen", desktop installs) then opens without a network.
+  void offline.precacheShell().catch(() => undefined);
+}
 
 const mb = (bytes: number): string => `${Math.round(bytes / 1024 / 1024)} MB`;
 
