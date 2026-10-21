@@ -178,8 +178,8 @@ export class Timer extends GameObject {
 
 /**
  * RAND: GET(range) -> [0, range); GET(offset, range) -> offset + [0, range).
- * Argument order inferred from the scripts: RANDOM^GET(0,2) picks between
- * events H0/H1 and RANDOM^GET(13,7) sets an FPS. TODO(unverified): DLL.
+ * CMC_Rand_Runner::get (0x100949f0) calls CXRandom::random(a, b)
+ * (0x100cb700), which is (GetTickCount() + rand()) % b + a.
  */
 export class Rand extends GameObject {
   constructor(engine: Engine, def: ObjectDef) {

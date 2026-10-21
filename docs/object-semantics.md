@@ -100,10 +100,11 @@ signalling object. The port passes the caller's THIS through.
 
 ## RAND
 
-`RANDOM^GET(range)` gives `[0, range)`, and `RANDOM^GET(offset, range)`
-gives `offset + [0, range)` (**inferred** from usage):
-- `RANDOM^GET(0,2)` must pick between the H0/H1 events in Space Invaders;
-- `RANDOM^GET(13,7)` sets an FPS.
+`RANDOM^GET(range)` gives `[0, range)`, and `RANDOM^GET(offset, range)` gives
+`offset + [0, range)` — **observed**:
+
+- `CMC_Rand_Runner::get` (0x100949f0) calls `CXRandom::random(a, b)` (0x100cb700).
+- That computes `(GetTickCount() + rand()) % b + a`.
 
 ## Not yet verified
 
