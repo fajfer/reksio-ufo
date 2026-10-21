@@ -442,6 +442,9 @@ export class Engine implements ScriptHost {
 
   async start(startScene?: string): Promise<void> {
     this.project = await Project.load(this.resolver);
+    // First run: adopt the original game's save (Ufo.ini) so progress carries over.
+    const iniFile = `${this.project.appName}.ini`;
+    if (this.ini.empty && this.fs.has(iniFile)) this.ini.importIni(new TextDecoder('windows-1250').decode(await this.fs.read(iniFile)));
     const episodeInfo = this.project.episodes.get(this.project.startEpisode)!;
     this.resolver.setSearchDirs([Project.dir(episodeInfo.path), Project.dir(this.project.appPath)]);
 

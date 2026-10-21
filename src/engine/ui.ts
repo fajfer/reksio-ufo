@@ -13,8 +13,8 @@ const str = (a: Arg | undefined) => argValue(a).toStr();
 
 /**
  * BUTTON: a hotspot (RECT, or the bounds of GFXSTANDARD) that swaps between
- * three graphics objects. DISABLE hides it; DISABLEBUTVISIBLE keeps the
- * standard graphic on screen but ignores input. (Inferred from usage.)
+ * three graphics objects. CButton::Enable(false) (0x100155f0) hides all of
+ * them; DisableButVisible (0x100155a0) keeps the standard one shown.
  */
 export class Button extends GameObject {
   enabled: boolean;
@@ -27,7 +27,9 @@ export class Button extends GameObject {
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
     this.enabled = this.boolProp('ENABLE', true);
-    this.visible = this.boolProp('VISIBLE', true);
+    // CMC_Button::createButton (0x10055e00) applies ENABLE via CButton::Enable
+    // (0x100155f0), which hides the standard graphic when false.
+    this.visible = this.enabled && this.boolProp('VISIBLE', true);
     this.priority = this.numProp('PRIORITY', 0);
     this.order = engine.nextOrder();
     const r = this.prop('RECT').split(',').map(Number);
