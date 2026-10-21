@@ -90,3 +90,62 @@ wait:3000
 clickname:DOASTEROIDOW
 waitscene:S33_METEORY,60000
 ```
+
+## S33_METEORY (minigame: flight through the asteroid field)
+
+Goal: fly the ship through 15 obstacle waves (`ARLEV`) without losing all
+energy (`ISHIPENERGY`, −20 per hit) or fuel (`ISHIPFUEL`, starts at 50, −8
+per new wave). When the waves run out (`IOL`=0) `AENDTICK` counts `IEND`
+45→0, `BSSUCCESS` plays the `SUKCES` narration and the game goes to
+`S34_0_KURAN`.
+
+Controls (`BSKEYBNRM`, 10 ms timer): `ArrowUp`/`ArrowDown` move the ship 4 px
+per tick (Y range 74..430), `ArrowRight` = boost. Flying through the Egyptian
+eyes (`AEYES`) reverses up/down for a while (`IREVCNT`).
+
+Refuelling: fuel runs out after ~6 waves, so you must fly into the corn
+island (`AOBJ5`, `WYSPA1_ZBOZE`). Its invisible `IMRECT` (priority 10) is the
+landing zone; `BCCOL` probes the ship point (frame origin + 66,58) with
+`GETGRAPHICSAT(...,FALSE,10,10)`. On a hit the ship plays `SHOW`, then
+`SHOW_LOOP` and fuel climbs +1 per corn-island frame until 100.
+
+Played for real with an in-page keyboard autopilot (it only dispatches
+`keydown`/`keyup` events for ArrowUp/ArrowDown; it reads object bounds to
+dodge rocks, coconuts, lightning, arrows and eyes, and steers onto
+`IMRECT` when the corn island is on screen). Script:
+`play3/ap.js` in the tester scratchpad; the core is reproduced here:
+
+```
+goto:scene=S33_METEORY&speed=1         (or arrive from S36)
+eval:<ap.js>                            (starts a 15 ms setInterval autopilot)
+waitscene:S34_0_KURAN,300000
+```
+
+Result on the final build: all 15 waves passed with energy 100, refuelled
+at the corn island three times, `ISUC`=1 → `S34_0_KURAN` (about 2.5 min at
+speed=1). No eval forcing of game state.
+
+Engine bug found here (fixed by the coordinator): IMAGE `SETPOSITION` added
+the IMG file offset, so the fuel/energy gauges (`IMYEL`/`IMRED`) were drawn
+off-screen (x≈1400), and the corn landing zone `IMRECT` was likewise
+misplaced, which made refuelling impossible. Re-verified on the new build:
+gauges at x=735 and refuelling works.
+
+Harmless warnings: `BUT_TAK`, `BUT_NIE`, `IMG_POPUP_BKG`, `BUT_PAUSE`
+are referenced by `BEH_RESTART` but not defined in the scene script
+(original-data defect).
+
+## S34_0_KURAN (closing cutscene)
+
+Goal: none. The rocket meets the Kurator's egg fighters (`JAJFAJTER*`),
+is shot down (`UCIECZKA` → `TRAFIONY` → `SPADA`); after `NARR34_0_4`
+`DOCRASH` sets `VARROZDZIAL4=1` and goes to `S41_0_CRASH`. **End of
+chapter 3.**
+
+```
+waitscene:S41_0_CRASH,150000
+eval:engine.find("VARROZDZIAL4").value.v      → 1
+```
+
+Warning `Unknown object VARFOTKASEEN` from `BEHRESETROZDZIAL4` is a known
+original-data defect.
