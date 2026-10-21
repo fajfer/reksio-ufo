@@ -89,6 +89,18 @@ export type SeqNode =
     };
 
 /**
+ * 1-based child number of a SEQEVENT value. CSequencedPlayable::play
+ * (0x100d0bc0) uses the first character: '1'-'9' -> child 0-8, 'A'-'Z' ->
+ * c - 0x38 (A = child 9), 'a'-'z' -> c - 0x3e.
+ */
+export function seqEventIndex(value: string): number {
+  const c = value.charCodeAt(0);
+  if (c <= 0x39) return c - 0x31 + 1;
+  if (c <= 0x5a) return c - 0x38 + 1;
+  return c - 0x3e + 1;
+}
+
+/**
  * Parse a .SEQ file into its root node. Children attach to parents with
  * `CHILD:ADD PARENT`; PARAMETER nodes map event names to 1-based child
  * indices via `NAME:SEQEVENT:EVENT = n`.
@@ -116,11 +128,11 @@ export function parseSeq(text: string): SeqNode | null {
       parentOf.set(m[1].trim().toUpperCase(), m[2].trim().toUpperCase());
       continue;
     }
-    m = /^([^:]+):SEQEVENT:([^=]+?)\s*=\s*(\d+)$/i.exec(line);
+    m = /^([^:]+):SEQEVENT:([^=]+?)\s*=\s*(\S+)$/i.exec(line);
     if (m) {
       const owner = m[1].trim().toUpperCase();
       if (!seqEvents.has(owner)) seqEvents.set(owner, new Map());
-      seqEvents.get(owner)!.set(m[2].trim().toUpperCase(), Number(m[3]));
+      seqEvents.get(owner)!.set(m[2].trim().toUpperCase(), seqEventIndex(m[3]));
       continue;
     }
     m = /^([^:]+):([^=]+?)\s*=\s*(.*)$/.exec(line);

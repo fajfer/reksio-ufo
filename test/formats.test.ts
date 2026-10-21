@@ -57,3 +57,8 @@ test('every ANN parses to EOF and its images decode', { skip: !haveGame }, async
   }
   assert.ok(images > 9000, `only ${images} images`);
 });
+
+test('SEQEVENT values use the engine character mapping', async () => {
+  const { seqEventIndex } = await import('../src/formats/cnv.ts');
+  assert.deepEqual(['1', '9', 'A', 'L', 'R'].map(seqEventIndex), [1, 9, 10, 21, 27]);
+});
