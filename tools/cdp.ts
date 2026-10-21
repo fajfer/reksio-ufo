@@ -1,7 +1,7 @@
 // Minimal headless-Chrome controller over the DevTools protocol.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -27,7 +27,6 @@ export class Browser {
   }
 
   static async launch(): Promise<Browser> {
-    const port = 9300 + Math.floor(Math.random() * 3000);
     const profile = mkdtempSync(join(tmpdir(), 'reksio-chrome-'));
     const chrome = spawn(
       process.env.CHROME ?? 'google-chrome',
@@ -36,7 +35,9 @@ export class Browser {
         '--no-sandbox',
         '--disable-gpu',
         '--autoplay-policy=no-user-gesture-required',
-        `--remote-debugging-port=${port}`,
+        // Port 0: Chrome picks a free port and writes it to DevToolsActivePort,
+        // so parallel sessions can never attach to each other's browser.
+        '--remote-debugging-port=0',
         `--user-data-dir=${profile}`,
         '--window-size=800,600',
         'about:blank',
@@ -45,8 +46,11 @@ export class Browser {
     );
     const b = new Browser(chrome, profile);
     let wsUrl = '';
+    const portFile = join(profile, 'DevToolsActivePort');
     for (let i = 0; i < 100 && !wsUrl; i++) {
       try {
+        if (!existsSync(portFile)) throw new Error('not up');
+        const port = Number(readFileSync(portFile, 'utf8').split('\n')[0]);
         const list = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as { type: string; webSocketDebuggerUrl: string }[];
         wsUrl = list.find((t) => t.type === 'page')?.webSocketDebuggerUrl ?? '';
       } catch {
