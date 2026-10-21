@@ -25,6 +25,9 @@ game. Useful query parameters:
 it shows the folder picker; served with the install at `/game/` it can also offer the offline download described below.
 `npm run preview` serves the build together with the install, handy for
 testing that flow locally.
+For static hosting, `npm run game-manifest -- <install>` writes the
+`manifest.json` (a JSON array of the install's file paths) next to the game
+files — the dev and preview servers generate it on the fly.
 
 Progress is saved in `localStorage`. On the first run, the install's `Ufo.ini`
 is imported, so saves from the original game carry over.
@@ -63,6 +66,7 @@ service worker, no stale caches).
 | `docs/` | Semantics recovered from PIKLIB8.dll with REA, with procedure addresses and observed/inferred markers |
 | `tools/annformat.md` | ANN byte layout |
 | `tools/drive.ts` | Headless Chrome driver (click/key/screenshot) for testing |
+| `tools/game-manifest.ts` | Writes the file-list manifest for a statically served install (`npm run game-manifest`) |
 | `tools/sweep.sh` | Load every scene and collect warnings plus screenshots |
 | `tools/fuzz.ts` | Click every active hotspot in every scene; report warnings, exceptions, transitions |
 | `docs/matrix.md`, `docs/filters-fonts.md` | MATRIX (Matrix.dll), rotation/fade filters, FNT fonts |

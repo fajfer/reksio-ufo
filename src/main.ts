@@ -100,13 +100,10 @@ if (hint) {
   installHint.hidden = false;
 }
 
-// iOS has no folder picker (<input webkitdirectory> is unsupported), so the
-// only ways to play there are the served install or the offline download.
+// iOS has no folder picker (<input webkitdirectory> is unsupported), so hide
+// it there: the served install or the offline download are the ways to play.
 if (isIOS || !('webkitdirectory' in document.createElement('input'))) {
   (document.getElementById('pick') as HTMLLabelElement).hidden = true;
-  const pickHint = document.getElementById('pick-hint') as HTMLDivElement;
-  pickHint.textContent = 'Na iPhonie/iPadzie nie można wskazać folderu gry — użyj przycisku „Graj” albo „Pobierz grę i graj offline”.';
-  pickHint.hidden = false;
 }
 
 // --- offline copy of the game ------------------------------------------------
@@ -189,13 +186,21 @@ offlineButton.addEventListener('click', async () => {
   }
 });
 
-// The dev server serves the install at /game/; without it, players pick their
-// own folder. With it, they can also download the game for offline play.
+// The install may be served at ./game/ (a manifest.json next to the files);
+// without it, players pick their own folder — and on iOS, where no folder
+// picker exists, nothing can be played.
 HttpFS.open('./game')
   .then((fs) => {
     setupOffline(fs);
     return start(fs);
   })
-  .catch(() => {
+  .catch((e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes('must be a JSON array')) {
+      status.textContent = 'Błąd: /game/manifest.json ma zły format — powinna to być lista plików gry (tablica JSON).';
+      console.error(message);
+      return;
+    }
     status.textContent = '';
+    console.info('No install served at ./game — folder-picker mode.', message);
   });

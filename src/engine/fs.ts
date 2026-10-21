@@ -33,8 +33,14 @@ export class HttpFS implements GameFS {
 
   static async open(base: string): Promise<HttpFS> {
     const res = await fetch(`${base.replace(/\/$/, '')}/manifest.json`);
-    if (!res.ok) throw new Error(`No game manifest at ${base}`);
-    return new HttpFS(base, (await res.json()) as string[]);
+    if (!res.ok) throw new Error(`no game manifest at ${base} (${res.status})`);
+    const files: unknown = await res.json().catch(() => null);
+    if (!Array.isArray(files) || files.some((f) => typeof f !== 'string')) {
+      // A common mix-up: the site's webmanifest copied in here. The game
+      // manifest is a JSON array of paths, not an app description.
+      throw new Error(`${base}/manifest.json must be a JSON array of file paths`);
+    }
+    return new HttpFS(base, files as string[]);
   }
 
   has(path: string): boolean {
