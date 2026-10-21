@@ -138,8 +138,15 @@ async function refreshOffline(note = ''): Promise<void> {
 }
 
 function setupOffline(fs: HttpFS): void {
-  if (!supported) return;
   offlineFs = fs;
+  if (!supported) {
+    // Don't hide the feature silently: the dev server (and browsers without
+    // service workers) cannot offer it.
+    status.textContent = import.meta.env.PROD
+      ? 'Ta przeglądarka nie obsługuje pobierania gry offline.'
+      : 'Ta wersja strony działa w trybie deweloperskim — pobieranie gry offline jest dostępne tylko w wersji produkcyjnej (npm run build).';
+    return;
+  }
   void refreshOffline();
 }
 
