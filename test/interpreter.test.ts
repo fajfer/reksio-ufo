@@ -158,3 +158,10 @@ test('every shipped statement has a call shape', { skip: !existsSync(GAME) }, ()
   const unexpected = odd.filter((s) => !s.includes('>') && !/: ([A-Z0-9_]+|[}\]]+)$/.test(s));
   assert.deepEqual(unexpected.slice(0, 5), []);
 });
+
+test('trailing junk after a call is ignored', () => {
+  const r = new Recorder('R');
+  const { interp } = setup([r]);
+  interp.runCode('{R^PLAY("2"):;}', ctx());
+  assert.deepEqual(r.calls, ['PLAY(2)']);
+});

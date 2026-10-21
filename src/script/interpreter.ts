@@ -148,7 +148,8 @@ function matchBracket(text: string, open: number): number {
   return -1;
 }
 
-const VARIABLE_TYPES = new Set(['INTEGER', 'STRING', 'BOOL', 'DOUBLE']);
+// Types 1-4 plus EXPRESSION (computed on read).
+const VARIABLE_TYPES = new Set(['INTEGER', 'STRING', 'BOOL', 'DOUBLE', 'EXPRESSION']);
 
 export class Interpreter {
   private host: ScriptHost;
@@ -276,10 +277,15 @@ export class Interpreter {
   }
 }
 
-/** runLine strips one leading '(' and one trailing ')'. */
+/**
+ * runLine strips one leading '(' and one trailing ')'. Text after the last ')'
+ * is dropped: the intro's `{THIS^PLAY("2"):;}` must still play event "2" for
+ * the scene to progress, so the original evidently tolerates trailing junk.
+ */
 function stripCallParens(s: string): string {
   let r = s;
   if (r.startsWith('(')) r = r.slice(1);
-  if (r.endsWith(')')) r = r.slice(0, -1);
+  const close = r.lastIndexOf(')');
+  if (close >= 0) r = r.slice(0, close);
   return r;
 }
