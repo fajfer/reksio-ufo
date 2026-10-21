@@ -6,6 +6,8 @@ original *Reksio i UFO* (AidemMedia, 2004) game data unchanged.
 No game files are included. Players pick their own install folder (the one
 containing `DANE` and `Wavs`), and the files are read locally in the browser.
 
+Done using [rea](https://github.com/morluto/rea)
+
 ## Running
 
 ```sh

@@ -25,6 +25,8 @@ export class Button extends GameObject {
   readonly order: number;
   state: 'standard' | 'move' | 'click' = 'standard';
   private rect: [number, number, number, number] | null = null;
+  /** Name of the graphic whose bounds form the hotspot (RECT=OBJECTNAME). */
+  private rectObject: string | null = null;
 
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
@@ -34,8 +36,11 @@ export class Button extends GameObject {
     this.visible = this.enabled && this.boolProp('VISIBLE', true);
     this.priority = this.numProp('PRIORITY', 0);
     this.order = engine.nextOrder();
+    // createButton (0x10055e00): RECT may name a graphics object, whose
+    // rectangle and priority become the hotspot's; otherwise it is x1,y1,x2,y2.
     const r = this.prop('RECT').split(',').map(Number);
     if (r.length === 4 && r.every(Number.isFinite)) this.rect = [r[0], r[1], r[2], r[3]];
+    else if (this.prop('RECT')) this.rectObject = this.prop('RECT').toUpperCase();
 
     this.method('ENABLE', () => {
       this.enabled = true;
@@ -93,13 +98,21 @@ export class Button extends GameObject {
     for (const g of [std, move, click]) if (g) g.visible = g === show;
   }
 
+  /** The graphic whose bounds define the hotspot, if any. */
+  private shapeGraphic(): Graphic | null {
+    if (this.rectObject) {
+      const o = this.engine.find(this.rectObject);
+      return o instanceof Graphic ? o : null;
+    }
+    return this.rect ? null : this.gfx('GFXSTANDARD');
+  }
+
   contains(x: number, y: number): boolean {
     if (this.rect) {
       const [x1, y1, x2, y2] = this.rect;
       return x >= x1 && y >= y1 && x < x2 && y < y2;
     }
-    const std = this.gfx('GFXSTANDARD');
-    return !!std && std.inRect(x, y);
+    return !!this.shapeGraphic()?.inRect(x, y);
   }
 
   debugRect(): { x: number; y: number; w: number; h: number } | null {
@@ -107,12 +120,12 @@ export class Button extends GameObject {
       const [x1, y1, x2, y2] = this.rect;
       return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
     }
-    const b = this.gfx('GFXSTANDARD')?.bounds();
+    const b = this.shapeGraphic()?.shapeBounds();
     return b ? { x: b.x, y: b.y, w: b.w, h: b.h } : null;
   }
 
   hitPriority(): number {
-    return this.gfx('GFXSTANDARD')?.priority ?? this.priority;
+    return this.shapeGraphic()?.priority ?? this.gfx('GFXSTANDARD')?.priority ?? this.priority;
   }
 
   setState(s: Button['state']): void {

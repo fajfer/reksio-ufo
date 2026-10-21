@@ -19,7 +19,9 @@ export class Behaviour extends GameObject {
       const start = argValue(args[0]).toInt();
       const len = argValue(args[1]).toInt();
       const step = args.length > 2 ? argValue(args[2]).toInt() || 1 : 1;
-      const extra = params(args.slice(3));
+      // runLooped (0x100523d0) passes [i, args[2..]]: the step is $2 and
+      // extra arguments start at $3 (S53 BEHINITZASLONAY reads $3).
+      const extra = params(args.slice(2));
       for (let i = start; i < start + len; i += step) {
         if (this.run(ctx.self, [String(i), ...extra], true) === BREAK) break;
       }

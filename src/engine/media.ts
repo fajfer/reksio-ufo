@@ -106,8 +106,13 @@ export abstract class Graphic extends GameObject implements Drawable {
     return spriteAlphaAt(b.sprite, l.x, l.y) > 0;
   }
 
+  /** Rectangle used for hotspots when nothing is drawn (see Animo). */
+  shapeBounds(): { x: number; y: number; w: number; h: number } | null {
+    return this.bounds();
+  }
+
   inRect(px: number, py: number): boolean {
-    const b = this.bounds();
+    const b = this.bounds() ?? this.shapeBounds();
     if (!b) return false;
     const l = this.toLocal(px, py, b);
     return l.x >= 0 && l.y >= 0 && l.x < b.w && l.y < b.h;
@@ -130,6 +135,13 @@ export class ImageObj extends Graphic {
 
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
+    for (const m of ['SETPOSITION', 'MOVE']) {
+      const base = this.methods.get(m)!;
+      this.method(m, (a, ctx) => {
+        this.positioned = true;
+        return base(a, ctx);
+      });
+    }
     this.method('LOAD', (a) => {
       void this.loadFile(str(a[0]));
     });
@@ -148,18 +160,31 @@ export class ImageObj extends Graphic {
     }
     const img = decodeImg(await this.engine.fs.read(path));
     this.sprite = makeSprite(img.width, img.height, img.rgba);
+    // An IMAGE's position is absolute and starts at the file's own x/y;
+    // SETPOSITION replaces it (S33's gauges: SETPOSITION([785-FUEL], GETPOSITIONY())).
+    if (!this.positioned) {
+      this.x = img.x;
+      this.y = img.y;
+    }
     this.imgX = img.x;
     this.imgY = img.y;
   }
 
+  /** Set once a script moved the image, so a late load keeps that position. */
+  private positioned = false;
+
   bounds() {
     if (!this.sprite && this.cloneOf instanceof ImageObj && this.cloneOf.sprite) {
       this.sprite = this.cloneOf.sprite;
+      if (!this.positioned) {
+        this.x = this.cloneOf.imgX;
+        this.y = this.cloneOf.imgY;
+      }
       this.imgX = this.cloneOf.imgX;
       this.imgY = this.cloneOf.imgY;
     }
     if (!this.sprite) return null;
-    return { x: this.x + this.imgX, y: this.y + this.imgY, w: this.sprite.width, h: this.sprite.height, sprite: this.sprite };
+    return { x: this.x, y: this.y, w: this.sprite.width, h: this.sprite.height, sprite: this.sprite };
   }
 }
 
@@ -215,7 +240,10 @@ export class Animo extends Graphic {
     this.method('GETFRAMENAME', () => Value.str(this.event?.frames[this.frame]?.name ?? ''));
     this.method('GETEVENTNAME', () => Value.str(this.event?.name ?? ''));
     this.method('GETNOFINEVENT', (a) => Value.int(this.findEvent(str(a[0]))?.frames.length ?? 0));
-    this.method('ISPLAYING', () => Value.bool(this.playing && !this.paused));
+    // ISPLAYING([event]): with an argument, only true while that event plays.
+    this.method('ISPLAYING', (a) =>
+      Value.bool(this.playing && !this.paused && (!a.length || this.event?.name === str(a[0]).toUpperCase())),
+    );
     this.method('GETCURRFRAMEPOSX', () => Value.int(this.bounds()?.x ?? this.x));
     this.method('GETCURRFRAMEPOSY', () => Value.int(this.bounds()?.y ?? this.y));
     this.method('GETMAXWIDTH', () => Value.int(Math.max(0, ...(this.ann?.images.map((i) => i.width) ?? [0]))));
@@ -349,6 +377,20 @@ export class Animo extends Graphic {
       this.sprites[i] = s;
     }
     return s;
+  }
+
+  /**
+   * An ANIMO resting on a zero-frame event (e.g. NOEVENT) draws nothing but
+   * still serves as a BUTTON's RECT (S52 BUTTONINDYK); fall back to frame 0
+   * of its first non-empty event. TODO(unverified): exact CAnimo rect in that state.
+   */
+  shapeBounds(): { x: number; y: number; w: number; h: number } | null {
+    const b = this.bounds();
+    if (b) return b;
+    // Frame 0 of the first event that has frames.
+    const fr = this.ann?.events.find((e) => e.frames.length)?.frames[0];
+    const img = fr && this.ann?.images[fr.image];
+    return fr && img ? { x: this.x + img.x + fr.dx, y: this.y + img.y + fr.dy, w: img.width, h: img.height } : null;
   }
 
   bounds() {

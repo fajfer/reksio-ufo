@@ -1,0 +1,92 @@
+# Chapter 3 walkthrough
+
+Session port used: 7112. Chapter entry `S31_0_ZIEMIA`; the chapter ends in
+`S34_0_KURAN` (`DOCRASH`: `VARROZDZIAL4^SET(1)` + `GOTO("S41_0_CRASH")`).
+
+Scene order: S31_0_ZIEMIA → S35_0_WRAKIECIE → S38_KALIBRACJA →
+S37_0_DROGAMLECZNA → S36_0_ROBOTY → S33_METEORY → S34_0_KURAN → (S41_0_CRASH).
+
+## Setup
+
+```
+eval:engine.ini.set("PRZYGODA","VARROZDZIAL3","1");engine.ini.set("PRZYGODA","VARROZDZIAL4","1");1
+goto:scene=MENUGLOWNE&speed=4
+clickname:BUTTONROZDZIAL3
+```
+
+Note: the very first `ini.set` straight after the first `goto` of a fresh
+session did not stick (the menu still showed only chapter 1); repeating it
+and doing `goto` again worked.
+
+## S31_0_ZIEMIA (cutscene)
+
+Goal: none, intro cutscene (Earth, satellite, UFO, rocket). Ends on
+`KRE31_0_4` finished → `GOTO("S35_0_WRAKIECIE")`.
+
+```
+waitscene:S35_0_WRAKIECIE,90000
+```
+
+## S35_0_WRAKIECIE
+
+Goal: after narration and Kret's line, `BUTTON2` (Kret) is enabled; clicking
+it goes to the calibration minigame.
+
+```
+wait:9000
+clickname:BUTTON2
+waitscene:S38_KALIBRACJA
+```
+
+## S38_KALIBRACJA (minigame)
+
+Goal: five object pairs (COMET, SATELLITE, SPUTNIK, UFO, EARTH) appear in the
+left (`ANN<X>0`, events cycle 1→2→3→1) and right (`ANN<X>1`, events cycle
+3→4→5→3) windows. Clicking an object advances its event. A pair is in sync
+when both show event `3`; when all ten are on `3` (sums 15/15,
+`CCONDTESTEND`), `SNDSUCCESS` plays and `DALEJ` goes to `S37_0_DROGAMLECZNA`.
+Wait until the entry narration finishes (`VARPLAY=1`) before clicking.
+
+The start state is random. Read it with this eval (prints `X:left/right`):
+
+```
+eval:["COMET","SATELLITE","SPUTNIK","UFO","EARTH"].map(n=>n+":"+["0","1"].map(i=>{const r=engine.find("ANN"+n+i).call("GETEVENTNAME",[],{self:null,params:[]});return r&&r.v!==undefined?r.v:JSON.stringify(r)}).join("/")).join(" ")
+```
+
+Then for each object not on 3, `clickname:ANN<X><0|1>` and re-read. The
+objects fly around quickly at speed=4, so a click sometimes misses (the
+object moved between the hotspot probe and the click) or hits a neighbour;
+re-read after every click and repeat. A small bash loop does it:
+
+```
+for t in COMET0 COMET1 SATELLITE0 SATELLITE1 SPUTNIK0 SPUTNIK1 UFO0 UFO1 EARTH0 EARTH1; do
+  # read state, stop when this object shows 3, else clickname:ANN$t, wait:250
+done
+```
+
+Notes: played for real, no eval forcing.
+
+## S37_0_DROGAMLECZNA (cutscene)
+
+Goal: none. Rocket flies along the Milky Way road; `RAKIETA` event `ODLOT`
+finished → `GOTO("S36_0_ROBOTY")`.
+
+```
+waitscene:S36_0_ROBOTY,120000
+```
+
+## S36_0_ROBOTY
+
+Goal: after the robot's entry line (`ROBOT36` `ENTRE` finished) the robot
+(`BUTTON2`, optional line) and the top-left exit `DOASTEROIDOW` are enabled.
+Clicking `DOASTEROIDOW` makes the rocket leave; when both the rocket
+animation and `KRE36_0_2` finish (`VAR_INC`=2), Kret says `KRE36_0_4` and the
+game goes to `S33_METEORY`.
+
+```
+wait:6000
+clickname:BUTTON2          (optional, robot talks)
+wait:3000
+clickname:DOASTEROIDOW
+waitscene:S33_METEORY,60000
+```
