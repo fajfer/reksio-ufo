@@ -100,6 +100,15 @@ export class Button extends GameObject {
     return !!std && std.inRect(x, y);
   }
 
+  debugRect(): { x: number; y: number; w: number; h: number } | null {
+    if (this.rect) {
+      const [x1, y1, x2, y2] = this.rect;
+      return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    }
+    const b = this.gfx('GFXSTANDARD')?.bounds();
+    return b ? { x: b.x, y: b.y, w: b.w, h: b.h } : null;
+  }
+
   hitPriority(): number {
     return this.gfx('GFXSTANDARD')?.priority ?? this.priority;
   }

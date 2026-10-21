@@ -550,6 +550,39 @@ export class Engine implements ScriptHost {
     requestAnimationFrame(this.frame);
   };
 
+  // --- debugging ---------------------------------------------------------------
+
+  /** Active hotspots with a clickable point each (used by tools/fuzz.ts). */
+  debugHotspots(): { name: string; x: number; y: number }[] {
+    const out: { name: string; x: number; y: number }[] = [];
+    const probe = (name: string, x0: number, y0: number, w: number, h: number) => {
+      // Sample a small grid and keep the first point that really hits.
+      for (let gy = 1; gy < 6; gy++) {
+        for (let gx = 1; gx < 6; gx++) {
+          const x = Math.round(x0 + (w * gx) / 6);
+          const y = Math.round(y0 + (h * gy) / 6);
+          const h2 = this.hotspotAt(x, y);
+          if (h2 && h2.name === name) return void out.push({ name, x, y });
+        }
+      }
+    };
+    for (const b of this.buttons) {
+      if (!b.enabled || !b.visible) continue;
+      const r = b.debugRect();
+      if (r) probe(b.name, r.x, r.y, r.w, r.h);
+    }
+    for (const d of this.renderer.topmostFirst()) {
+      if (!(d instanceof Animo) || !d.asButton) continue;
+      const bb = d.bounds();
+      if (bb) probe(d.name, bb.x, bb.y, bb.w, bb.h);
+    }
+    return out;
+  }
+
+  get currentScene(): string | null {
+    return this.switching ? null : this.sceneName;
+  }
+
   // --- input -----------------------------------------------------------------
 
   private toScreen(e: MouseEvent): { x: number; y: number } {
