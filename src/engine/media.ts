@@ -256,6 +256,10 @@ export class Animo extends Graphic {
     this.method('GETFRAME', () => Value.int(this.frame));
     this.method('GETFRAMENAME', () => Value.str(this.event?.frames[this.frame]?.name ?? ''));
     this.method('GETEVENTNAME', () => Value.str(this.event?.name ?? ''));
+    // GETNOF: CAnimo::GetNOF (0x10003700) returns field +0x1f4, read by Next as
+    // the image count (inferred). GETNOE: number of events.
+    this.method('GETNOF', () => Value.int(this.ann?.images.length ?? 0));
+    this.method('GETNOE', () => Value.int(this.ann?.events.length ?? 0));
     this.method('GETNOFINEVENT', (a) => Value.int(this.findEvent(str(a[0]))?.frames.length ?? 0));
     // ISPLAYING([event]): with an argument, only true while that event plays.
     this.method('ISPLAYING', (a) =>
