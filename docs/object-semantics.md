@@ -114,9 +114,19 @@ signalling object. The port passes the caller's THIS through.
 - `CMC_Rand_Runner::get` (0x100949f0) calls `CXRandom::random(a, b)` (0x100cb700).
 - That computes `(GetTickCount() + rand()) % b + a`.
 
+## TIMER
+
+**Observed:**
+
+- `CMC_Timer::onTimer` (0x100b19f0): when enabled, it increments the count.
+  If `TICKS > 0` and count == TICKS, the timer disables itself, keeping the
+  count. Then `ONTICK^<count>` fires, falling back to `ONTICK`.
+- `ENABLE` (0x100b1b50) restarts from 0 only if the timer was disabled.
+- `RESET` (0x100b1bd0) zeroes the count and the interval.
+- `SET(n)` (0x100b1bf0) sets the count and restarts the interval.
+
 ## Not yet verified
 
-- TIMER tick counting and TICKS semantics.
 - GETGRAPHICSAT argument meaning beyond `(x, y, alphaTest, minPriority, maxPriority, …)`.
 - MATRIX (native minigame helper, used by one scene).
 - STATICFILTER / FILTER.

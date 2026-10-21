@@ -132,46 +132,64 @@ export class Expression extends GameObject {
   }
 }
 
-/** TIMER: fires ONTICK every ELAPSE ms, TICKS times (0 = forever). */
+/**
+ * TIMER (CMC_Timer::onTimer 0x100b19f0): every ELAPSE ms the tick count is
+ * incremented; when TICKS > 0 and the count reaches TICKS the timer disables
+ * itself (keeping the count); then ONTICK^count / ONTICK fires.
+ */
 export class Timer extends GameObject {
   enabled: boolean;
   elapse: number;
   ticks: number;
   private count = 0;
   private acc = 0;
+  private paused = false;
 
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
     this.enabled = this.boolProp('ENABLED', true);
     this.elapse = this.numProp('ELAPSE', 1000);
     this.ticks = this.numProp('TICKS', 0);
+    // enable (0x100b1b50) restarts only a disabled timer.
     this.method('ENABLE', () => {
+      if (this.enabled) return;
       this.enabled = true;
+      this.count = 0;
+      this.acc = 0;
     });
     this.method('DISABLE', () => {
       this.enabled = false;
     });
+    this.method('PAUSE', () => {
+      this.paused = true;
+    });
+    this.method('RESUME', () => {
+      this.paused = false;
+    });
+    // reset (0x100b1bd0) / set (0x100b1bf0) restart the interval.
     this.method('RESET', () => {
       this.count = 0;
       this.acc = 0;
     });
+    this.method('SET', (a) => {
+      this.count = argValue(a[0]).toInt();
+      this.acc = 0;
+    });
     this.method('SETELAPSE', (a) => {
       this.elapse = argValue(a[0]).toInt();
+      this.acc = 0;
     });
     this.method('GETTICKS', () => Value.int(this.count));
   }
 
   tick(dt: number): void {
-    if (!this.enabled || this.elapse <= 0) return;
+    if (!this.enabled || this.paused || this.elapse <= 0) return;
     this.acc += dt;
     while (this.enabled && this.acc >= this.elapse) {
       this.acc -= this.elapse;
       this.count++;
-      this.signal('ONTICK', String(this.count), [String(this.count)]);
-      if (this.ticks > 0 && this.count >= this.ticks) {
-        this.enabled = false;
-        this.count = 0;
-      }
+      if (this.ticks > 0 && this.count === this.ticks) this.enabled = false;
+      this.signal('ONTICK', String(this.count));
     }
   }
 }
