@@ -36,6 +36,8 @@ is imported, so saves from the original game carry over.
 | `tools/annformat.md` | ANN byte layout |
 | `tools/drive.ts` | Headless Chrome driver (click/key/screenshot) for testing |
 | `tools/sweep.sh` | Load every scene and collect warnings plus screenshots |
+| `tools/fuzz.ts` | Click every active hotspot in every scene; report warnings, exceptions, transitions |
+| `docs/matrix.md`, `docs/filters-fonts.md` | MATRIX (Matrix.dll), rotation/fade filters, FNT fonts |
 
 ## Tests
 
@@ -47,10 +49,16 @@ npm run typecheck
 ## Status
 
 - All 102 encrypted scripts, 707 images and 805 animations decode.
-- All 90 scenes load and render. The intro plays through its scripted
-  sequence, and the main menu and chapter selection lead into gameplay.
-- Not implemented yet:
-  - `MATRIX` (digging minigame grid logic, S44)
-  - `STATICFILTER` / `FILTER` (sprite rotation in the race and gauges; one fade)
-  - bitmap fonts for `TEXT`
-- Full playthroughs have not been tested; expect scene-specific issues.
+- All 90 scenes load and render.
+- Play-tested headlessly with `tools/drive.ts` / `tools/fuzz.ts`:
+  - the intro and main menu;
+  - chapter selection into gameplay;
+  - dialogue with lip-sync;
+  - Space Invaders, Pac-Man, the car choice → race (with sprite rotation),
+    and the digging game (`MATRIX`, from the Matrix.dll plug-in).
+- Engine semantics are taken from the DLLs, with addresses, in `docs/`.
+  Remaining inferences are marked there.
+- Known gaps:
+  - `ARIAL14.FNT`, named by the TEXT/FONT objects, is not part of this
+    install, so text uses a canvas font.
+  - Full start-to-finish playthroughs have not been done yet.
