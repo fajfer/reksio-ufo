@@ -153,6 +153,11 @@ export class ImageObj extends Graphic {
   }
 
   bounds() {
+    if (!this.sprite && this.cloneOf instanceof ImageObj && this.cloneOf.sprite) {
+      this.sprite = this.cloneOf.sprite;
+      this.imgX = this.cloneOf.imgX;
+      this.imgY = this.cloneOf.imgY;
+    }
     if (!this.sprite) return null;
     return { x: this.x + this.imgX, y: this.y + this.imgY, w: this.sprite.width, h: this.sprite.height, sprite: this.sprite };
   }
@@ -243,6 +248,16 @@ export class Animo extends Graphic {
     this.sprites = this.ann.images.map(() => null);
     if (!this.props.has('FPS') && this.ann.fps) this.fps = this.ann.fps;
     this.event = this.ann.events[0] ?? null;
+    this.resourcesReady();
+    for (const c of this.clones) {
+      if (c instanceof Animo && !c.ann) {
+        c.copyResourcesFrom(this);
+        c.resourcesReady();
+      }
+    }
+  }
+
+  private resourcesReady(): void {
     if (this.pendingPlay !== null) {
       const ev = this.pendingPlay;
       this.pendingPlay = null;
@@ -270,6 +285,7 @@ export class Animo extends Graphic {
   private pendingPlay: string | null = null;
 
   play(name: string): void {
+    if (!this.ann && this.cloneOf instanceof Animo && this.cloneOf.ann) this.copyResourcesFrom(this.cloneOf);
     if (!this.ann && this.prop('FILENAME')) {
       this.pendingPlay = name;
       this.visible = true;
@@ -322,6 +338,7 @@ export class Animo extends Graphic {
   }
 
   private sprite(i: number): Sprite | null {
+    if (!this.ann && this.cloneOf instanceof Animo && this.cloneOf.ann) this.copyResourcesFrom(this.cloneOf);
     if (!this.ann || !this.buf) return null;
     let s = this.sprites[i];
     if (s === undefined) return null;
@@ -335,6 +352,7 @@ export class Animo extends Graphic {
   }
 
   bounds() {
+    if (!this.ann && this.cloneOf instanceof Animo && this.cloneOf.ann) this.copyResourcesFrom(this.cloneOf);
     const fr = this.event?.frames[this.frame];
     if (!fr || !this.ann) return null;
     const h = this.ann.images[fr.image];

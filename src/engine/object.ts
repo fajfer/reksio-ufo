@@ -18,6 +18,8 @@ export class GameObject implements ScriptObject {
   containerName = '';
   /** Clone number; 0 for the original. */
   cloneIndex = 0;
+  /** The original this object was cloned from. */
+  cloneOf: GameObject | null = null;
   clones: GameObject[] = [];
   protected methods = new Map<string, Method>();
 

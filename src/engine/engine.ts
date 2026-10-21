@@ -324,8 +324,10 @@ export class Engine implements ScriptHost {
       const clone = new ctor(this, def);
       clone.cloneIndex = idx;
       clone.containerName = src.containerName;
-      if (clone instanceof Animo && src instanceof Animo) clone.copyResourcesFrom(src);
-      if (clone instanceof ImageObj && src instanceof ImageObj) clone.sprite = src.sprite;
+      // Resources are shared lazily: the original may still be loading
+      // (CNVLOADER objects are cloned right after LOAD).
+      clone.cloneOf = src;
+      if (clone instanceof Animo && src instanceof Animo && src.ann) clone.copyResourcesFrom(src);
       if (clone instanceof ArrayVar && src instanceof ArrayVar) clone.items = [];
       src.clones.push(clone);
       container.add(clone);
