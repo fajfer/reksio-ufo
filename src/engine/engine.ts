@@ -560,7 +560,7 @@ export class Engine implements ScriptHost {
 
   private frame = (now: number): void => {
     if (!this.running) return;
-    const dt = Math.min(100, now - this.lastTime);
+    const dt = Math.min(100, now - this.lastTime) * this.audio.speed;
     this.lastTime = now;
     if (!this.switching) {
       if (!this.paused) {

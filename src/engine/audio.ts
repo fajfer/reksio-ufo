@@ -7,6 +7,8 @@ export class AudioSystem {
   readonly ctx: AudioContext;
   readonly sfxBus: GainNode;
   readonly musicBus: GainNode;
+  /** Test fast-forward (?speed=N): every voice plays N times faster. */
+  speed = 1;
   private cache = new Map<string, Promise<AudioBuffer>>();
   private fs: GameFS;
 
@@ -98,7 +100,7 @@ export class Voice {
   /** Play at `hz` samples per second (SOUND^SETFREQ). */
   setFrequency(hz: number): void {
     this.rate = hz > 0 ? hz / (nativeRates.get(this.buffer) ?? this.buffer.sampleRate) : 1;
-    if (this.source) this.source.playbackRate.value = this.rate;
+    if (this.source) this.source.playbackRate.value = this.rate * this.audio.speed;
   }
 
   play(from = 0): void {
@@ -106,7 +108,7 @@ export class Voice {
     const src = this.audio.ctx.createBufferSource();
     src.buffer = this.buffer;
     src.loop = this.loop;
-    src.playbackRate.value = this.rate;
+    src.playbackRate.value = this.rate * this.audio.speed;
     src.connect(this.gain);
     src.onended = () => {
       if (this.source !== src) return;
@@ -115,14 +117,14 @@ export class Voice {
       this.onEnded?.();
     };
     this.offset = from;
-    this.startedAt = this.audio.ctx.currentTime - from;
+    this.startedAt = this.audio.ctx.currentTime - from / (this.rate * this.audio.speed);
     src.start(0, from);
     this.source = src;
   }
 
   pause(): void {
     if (!this.source) return;
-    this.offset = (this.audio.ctx.currentTime - this.startedAt) % this.buffer.duration;
+    this.offset = ((this.audio.ctx.currentTime - this.startedAt) * this.rate * this.audio.speed) % this.buffer.duration;
     this.stopSource();
   }
 

@@ -14,23 +14,28 @@ function serveGame(): Plugin {
       const p = join(d, f);
       return statSync(p).isDirectory() ? walk(p) : [relative(gameDir, p).split(sep).join('/')];
     });
+  const middleware = (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => {
+    const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    if (url === '/manifest.json') {
+      manifest ??= JSON.stringify(walk(gameDir));
+      res.setHeader('Content-Type', 'application/json');
+      res.end(manifest);
+      return;
+    }
+    const file = resolve(join(gameDir, url));
+    if (!file.startsWith(gameDir + sep) || !existsSync(file) || !statSync(file).isFile()) return next();
+    res.setHeader('Content-Length', statSync(file).size);
+    createReadStream(file).pipe(res);
+  };
   return {
     name: 'serve-game',
     configureServer(server) {
-      if (!existsSync(gameDir)) return;
-      server.middlewares.use('/game', (req, res, next) => {
-        const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
-        if (url === '/manifest.json') {
-          manifest ??= JSON.stringify(walk(gameDir));
-          res.setHeader('Content-Type', 'application/json');
-          res.end(manifest);
-          return;
-        }
-        const file = resolve(join(gameDir, url));
-        if (!file.startsWith(gameDir + sep) || !existsSync(file) || !statSync(file).isFile()) return next();
-        res.setHeader('Content-Length', statSync(file).size);
-        createReadStream(file).pipe(res);
-      });
+      if (existsSync(gameDir)) server.middlewares.use('/game', middleware);
+    },
+    // `vite preview` serves the production build plus the install, for long
+    // play-testing sessions that must not be reset by dev-server reloads.
+    configurePreviewServer(server) {
+      if (existsSync(gameDir)) server.middlewares.use('/game', middleware);
     },
   };
 }
@@ -38,5 +43,6 @@ function serveGame(): Plugin {
 export default defineConfig({
   base: './',
   server: { host: '127.0.0.1' },
+  preview: { host: '127.0.0.1' },
   plugins: [serveGame()],
 });
