@@ -23,9 +23,11 @@ game. Useful query parameters:
 - `?classic=1` — play the original balance (skip the gameplay tweaks below)
 
 The scripts are the original ones; a few documented gameplay tweaks live in
-`src/mods.ts` (currently: Alien Invaders re-throw cooldown of 0.2 s instead of
-one throw per beetroot flight). `?classic=1` turns them off; edit the `ELAPSE`
-value there to tune the cooldown.
+`src/mods.ts`, all in Alien Invaders: a 0.2 s re-throw cooldown instead of one
+throw per beetroot flight, throws only when clicking near Reksio (clicking away
+just walks him there — handy on touch screens), and a "POMIŃ" skip button on
+the right for the first 5 seconds. `?classic=1` turns them off; each tweak's
+constants (cooldown, tap radius, skip time) sit next to its code.
 
 `npm run build` produces a static site in `dist/`. Deployed without `/game/`,
 it shows the folder picker; served with the install at `/game/` it can also offer the offline download described below.

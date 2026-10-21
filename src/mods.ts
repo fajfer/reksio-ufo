@@ -5,7 +5,11 @@
 import type { ObjectDef } from './formats/cnv.ts';
 
 export function applySceneTweaks(scene: string, defs: ObjectDef[]): void {
-  if (scene === 'S16_SPACEINVADERS') invaderRapidFire(defs);
+  if (scene === 'S16_SPACEINVADERS') {
+    invaderRapidFire(defs);
+    invaderTapFire(defs);
+    invaderSkipButton(defs);
+  }
 }
 
 /**
@@ -43,6 +47,130 @@ function invaderRapidFire(defs: ObjectDef[]): void {
         ['ELAPSE', '200'],
         ['TICKS', '1'],
         ['ONTICK', '{VARFIREOK^SET(1);}'],
+      ]),
+    },
+  );
+}
+
+/** How close to Reksio's center a click must be to throw (px). */
+const TAP_RADIUS = 70;
+
+/**
+ * Alien Invaders: a tap used to throw first and only then start moving Reksio,
+ * which makes dodging beams on a touch screen awkward. Route the click through
+ * a range check instead: clicking near Reksio (within TAP_RADIUS of his
+ * center) throws, clicking away just walks him there — the scene's own
+ * BEHREKSIOMOVE already moves Reksio toward the pointer each idle frame.
+ */
+function invaderTapFire(defs: ObjectDef[]): void {
+  const mouse = defs.find((d) => d.name.toUpperCase() === 'MOUSE');
+  mouse?.props.set('ONCLICK', 'BEHCLICK');
+  defs.push(
+    { name: 'VARCLICKDX', props: new Map([['TYPE', 'INTEGER']]) },
+    {
+      name: 'BEHCLICK',
+      props: new Map([
+        ['TYPE', 'BEHAVIOUR'],
+        ['CODE', '{VARCLICKDX^SET([MOUSE^GETPOSX()-ANIMOREKSIO^GETCENTERX()]);CONDCLICKNEAR1^CHECK(TRUE);}'],
+      ]),
+    },
+    {
+      name: 'CONDCLICKNEAR1',
+      props: new Map([
+        ['TYPE', 'CONDITION'],
+        ['OPERAND1', 'VARCLICKDX'],
+        ['OPERATOR', 'LESS'],
+        ['OPERAND2', String(TAP_RADIUS)],
+        ['ONRUNTIMESUCCESS', '{CONDCLICKNEAR2^CHECK(TRUE);}'],
+      ]),
+    },
+    {
+      name: 'CONDCLICKNEAR2',
+      props: new Map([
+        ['TYPE', 'CONDITION'],
+        ['OPERAND1', 'VARCLICKDX'],
+        ['OPERATOR', 'GREATER'],
+        ['OPERAND2', String(-TAP_RADIUS)],
+        ['ONRUNTIMESUCCESS', 'BEHREKSIOFIRE'],
+      ]),
+    },
+  );
+}
+
+/** How long the skip button stays on screen (seconds). */
+const SKIP_SECONDS = 5;
+
+/**
+ * Alien Invaders: a "POMIŃ" (skip) button on the right, shown for the first
+ * SKIP_SECONDS seconds. Pressing it stops the UFOs and their beams and plays
+ * Reksio's SUCCESS — the scene's normal win path (narration, then the next
+ * scene). STOP(FALSE) keeps ONFINISHED handlers (farm landings) out of it.
+ */
+function invaderSkipButton(defs: ObjectDef[]): void {
+  const rect = '640,250,780,310';
+  defs.push(
+    {
+      name: 'FNTBIG',
+      // Size and weight come from the DEF_ name; ARIAL14.FNT is missing from
+      // this install, so this renders with the canvas fallback at 26px bold.
+      props: new Map([
+        ['TYPE', 'FONT'],
+        ['DEF_ARIAL_BOLD_26', 'ARIAL14.FNT'],
+      ]),
+    },
+    {
+      name: 'TEXTSKIP',
+      props: new Map([
+        ['TYPE', 'TEXT'],
+        ['VISIBLE', 'TRUE'],
+        ['FONT', 'FNTBIG'],
+        ['TOCANVAS', 'TRUE'],
+        ['RECT', rect],
+        ['PRIORITY', '400'],
+        ['HJUSTIFY', 'CENTER'],
+        ['VJUSTIFY', 'TRUE'],
+        ['TEXT', 'POMIŃ'],
+        ['MONITORCOLLISION', 'FALSE'],
+      ]),
+    },
+    {
+      name: 'BUTTONSKIP',
+      props: new Map([
+        ['TYPE', 'BUTTON'],
+        ['VISIBLE', 'TRUE'],
+        ['ENABLE', 'TRUE'],
+        ['RECT', rect],
+        ['ONRELEASED', 'BEHSKIP'],
+      ]),
+    },
+    {
+      name: 'TIMERHINT',
+      props: new Map([
+        ['TYPE', 'TIMER'],
+        ['ENABLED', 'TRUE'],
+        ['ELAPSE', String(SKIP_SECONDS * 1000)],
+        ['TICKS', '1'],
+        ['ONTICK', '{BUTTONSKIP^DISABLE();TEXTSKIP^HIDE();}'],
+      ]),
+    },
+    {
+      name: 'BEHSKIPSTOP',
+      props: new Map([
+        ['TYPE', 'BEHAVIOUR'],
+        ['CODE', '{$1^STOP(FALSE);$1^HIDE();}'],
+      ]),
+    },
+    {
+      name: 'BEHSKIP',
+      props: new Map([
+        ['TYPE', 'BEHAVIOUR'],
+        [
+          'CODE',
+          '{TIMER1^DISABLE();TIMERHINT^DISABLE();BUTTONSKIP^DISABLE();TEXTSKIP^HIDE();' +
+            'S16_SPACEINVADERS^RUNCLONES("ANIMOUFO",-1,-1,"BEHSKIPSTOP");' +
+            'S16_SPACEINVADERS^RUNCLONES("ANIMOUFOFIRE",-1,-1,"BEHSKIPSTOP");' +
+            'ANIMOBURAK^STOP(FALSE);ANIMOBURAK^HIDE();ANIMOREKSIO^PLAY("SUCCESS");}',
+        ],
       ]),
     },
   );
