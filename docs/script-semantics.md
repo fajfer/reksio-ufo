@@ -66,13 +66,113 @@ partly **inferred**, because the decompiler output is tangled there):
 - Literal type comes from `CMC_Variable::resolve` (TODO: exact rules, e.g.
   `3.0` → DOUBLE, quoted → STRING, `TRUE`/`FALSE` → BOOL).
 
-## TODO (next to recover)
+## Literals
 
-- `CMC_Behaviour_Entry::getCodeLines` (0x10050750): statement splitting, how
-  quotes and brackets are handled, and malformed input.
-- `CMC_Behaviour::runLine` (0x1004e440) / `resolveObject` (0x1004e7e0): target
-  resolution, including `[expr]^METHOD`, and `THIS`.
-- `CMC_Behaviour::resolveParameters` (0x1004ea00): argument-list splitting.
-- `@IF` and other `@` keywords.
-- `CMC_Behaviour_Runner`: RUN / RUNC (0x10052340) / RUNLOOPED (0x100523d0), and `_break`.
-- `CMC_Condition::valid` (0x100607e0) and CONDITION/COMPLEXCONDITION.
+`CMC_Variable::resolve` (0x100b26a0) — **observed**:
+
+| Text | Result |
+|---|---|
+| starts with `"` | STRING. One leading `"` is removed, and one trailing `"` if present. `"ANNCAR0` → `ANNCAR0`; `""OPEN""` → `"OPEN"` (keeps the inner quotes) |
+| starts with `-` or a digit, contains `.` | DOUBLE (`toDouble`) |
+| starts with `-` or a digit, no `.` | INTEGER (`toNumber`, atoi-like) |
+| exactly `TRUE` / `FALSE` | BOOL |
+| anything else, including empty | STRING, verbatim |
+
+## Statement splitting
+
+`CMC_Behaviour_Entry::getCodeLines` (0x10050750) — **observed**:
+
+- It walks the code character by character, tracking only `(`/`)` depth.
+- `;` at depth 0 ends a statement.
+- **Every space (0x20) is deleted**, inside strings as well. The language has
+  no string escaping or quote awareness at this level.
+- Brackets `[`/`]` and quotes do not affect splitting.
+
+## Argument splitting
+
+`CMC_Behaviour::resolveParameters` (0x1004ea00) — **observed**:
+
+- It splits on `,` at parenthesis depth 0, with **no quote awareness**.
+- Each piece goes through `resolveParameter`.
+- Consequence for the S67 race scene: `ADD("ANNCAR0,"ANNCAR1","ANNCAR2","ANNCAR3")`
+  splits into `"ANNCAR0`, `"ANNCAR1"`, `"ANNCAR2"`, `"ANNCAR3"`, which resolve to
+  the four intended strings. The missing quote is harmless in the original.
+
+## Executing one statement
+
+`CMC_Behaviour_Entry::run` (0x10050a50) and `CMC_Behaviour::runLine`
+(0x1004e440) — **observed**:
+
+1. `fillParams` substitutes `$n` (above).
+2. If the line starts with `[`, the bracket expression is evaluated, and its
+   string value names the target object (dynamic dispatch, e.g. `["ANIMO"+$1]^HIDE()`).
+3. `@NAME(args)`: a keyword on the global runner (below).
+4. `*X^M(args)`: dereference. X is resolved as a parameter, and its string value is the object name.
+5. Otherwise the target is the text before the **first** `^` and the method is
+   the text after the **last** `^`. Chained calls are not supported.
+   `THIS` is the object that owns the running behaviour or event.
+6. Args: the text after the first `(`. One leading `(` and one trailing `)` are
+   stripped, then the rest is split as above.
+7. Object lookup, `CMC_ObjectsContainer::getObject` (0x1008b270): a hash lookup by
+   name. On a miss, a trailing `_0` is stripped and the lookup retried (clone 0
+   is the original). Then it falls back to the parent container
+   (scene → episode → application).
+
+## Behaviours
+
+`CMC_Behaviour::run(obj, params, checkCondition)` (0x1004dd00) — **observed**:
+
+- A disabled behaviour does nothing.
+- With `checkCondition`, a CONDITION that fails makes it do nothing.
+- Statements run in order. An entry result of **−1** stops the behaviour and
+  reports *broken*. Any **other negative** (−2) stops just this behaviour, not broken.
+- The return value is the object named `__RETURN__` (copied), set via `@RETURN`.
+
+`CMC_Behaviour_Runner` — **observed**:
+
+- `RUN(args…)` (0x100522b0): `run(params, checkCondition=false)`, so the CONDITION is **ignored**.
+- `RUNC(args…)` (0x10052340): `run(params, checkCondition=true)`.
+- Both return −1 when the behaviour broke, so the caller's statement result is
+  −1 and **BREAK propagates up the whole call chain**. Otherwise they return `__RETURN__`.
+- `RUNLOOPED(start, len[, step=1], extra…)` (0x100523d0): for `i = start; i < start+len; i += step`,
+  it calls `run([i, extra…], checkCondition=true)`, so `$1` is the loop index.
+  It stops when the behaviour reports broken.
+  - Extra arguments are passed as strings. A variable passes its value; another
+    object passes its name. **Inferred**: the branches are partly tangled.
+
+## CONDITION / COMPLEXCONDITION
+
+`CMC_Condition::valid(fireEvents)` (0x100607e0) — **observed**:
+
+- OPERAND1 and OPERAND2 are evaluated like parameters. If their types differ,
+  operand 2 is converted to operand 1's type, and a failed conversion means false.
+- OPERATOR: 1 EQUAL, 2 NOTEQUAL, 3 LESS, 4 LESSEQUAL, 5 GREATER, 6 GREATEREQUAL.
+- With `fireEvents`, it runs the `ONRUNTIMESUCCESS` or `ONRUNTIMEFAILED` handler.
+
+Condition methods, `CMC_BasicCondition_Runner` (run 0x1004d040, ids from
+prepareMthHashSet 0x1004d160) — **observed**:
+
+| Method | id | Behaviour |
+|---|---|---|
+| `CHECK([fireEvents=TRUE])` | 1 | returns BOOL `valid(fireEvents)` |
+| `BREAK([fireEvents=TRUE])` | 2 | if valid, returns −1: aborts the current behaviour **and all callers**, and ends RUNLOOPED |
+| `ONEBREAK` / `ONE_BREAK([fireEvents=TRUE])` | 3 | if valid, returns −2: aborts **only** the current behaviour |
+
+- The hash registers `ONEBREAK`, while the game writes `ONE_BREAK`. A separate
+  `ONE_BREAK` string exists at 0x101495b4. Treat both as id 3 (**inferred**).
+- COMPLEXCONDITION (`valid` 0x1005f5f0) combines CONDITION1/CONDITION2 with
+  AND/OR. TODO: confirm whether it short-circuits.
+
+## `@` keywords
+
+Global runner keyword table (strings at 0x1014a860–0x1014a8ec), **observed**
+names: `IF, WHILE, RETURN, MSGBOX, BOOL, INT, DOUBLE, STRING, LOOP, RUNONTIMER,
+CREATE, GETAPPLICATIONNAME, GETCURRENTSCENE, ONEBREAK, CONTINUE`.
+
+This game uses only `@IF`, 9 times, always as `@IF("VAR","OP","VALUE","BEH_TRUE","BEH_FALSE")`.
+The handler sits behind an unnamed runner (hash setup sub_10065320) and was not
+traced. Implemented as **inferred**:
+
+- VAR is a variable name and VALUE is resolved as a literal.
+- `_` means equal and `!_` means not equal.
+- It runs BEH_TRUE or BEH_FALSE; an empty name means nothing to run.
