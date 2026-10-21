@@ -211,6 +211,58 @@ def rle8(src, out_bytes):
     return bytes(out[:out_bytes])
 
 
+def lzw_unwrap(buf):
+    """Legacy CLZWCompression::decompress 0x10034a40 container.
+
+    [u32 decompressed_size][u32 compressed_size][u32 n_codes] + LSB-first
+    variable-width (9..16 bit) LZW codes; 0x100 = clear, first free code 0x101,
+    width grows when the next code no longer fits the mask.
+    """
+    dsize, _csize, ncodes = struct.unpack_from("<III", buf, 0)
+    src = bytes(buf[12:]) + b"\0\0\0\0"
+    bitpos, width, mask, nxt = 0, 9, 0x1FF, 0x101
+    table = {}
+    out = bytearray()
+    prev = None
+    for _ in range(ncodes):
+        v = int.from_bytes(src[bitpos >> 3:(bitpos >> 3) + 4], "little")
+        code = (v >> (bitpos & 7)) & mask
+        bitpos += width
+        if code == 0x100:
+            width, mask, nxt, table, prev = 9, 0x1FF, 0x101, {}, None
+            continue
+        if code < 0x100:
+            entry = bytes((code,))
+        elif code in table:
+            entry = table[code]
+        elif prev is not None:
+            entry = prev + prev[:1]
+        else:
+            raise ANNError("bad LZW code %d" % code)
+        out += entry
+        if prev is not None and nxt < 0x10000:
+            table[nxt] = prev + entry[:1]
+            nxt += 1
+        prev = entry
+        if width < 16 and (nxt & ~mask):
+            width += 1
+            mask = mask * 2 + 1
+    return bytes(out[:dsize]).ljust(dsize, b"\0")
+
+
+def _unwrap_lzo_or_lzw(buf):
+    """CGraphicsObject::DeCompress always calls CLZWCompression2 (= LZO1X).
+
+    A few legacy files (only PRZYGODA/Droga/kura.ann) instead carry the old
+    12-byte-header LZW container; detect it by its size field.
+    """
+    if len(buf) >= 12:
+        _d, csize = struct.unpack_from("<II", buf, 0)
+        if csize + 8 != len(buf) and csize + 12 == len(buf):
+            return lzw_unwrap(buf)
+    return lzo.piklib_unwrap(buf)
+
+
 def decode_planes(data, img):
     """Return (color565: bytes len w*h*2, alpha: bytes len w*h or None)."""
     w, h, comp = img["width"], img["height"], img["compression"]
@@ -218,11 +270,11 @@ def decode_planes(data, img):
     alp = data[img["alpha_offset"]:img["alpha_offset"] + img["alpha_size"]] if img["alpha_size"] else None
     npx = w * h
     if comp in (COMP_LZO, COMP_LZO_RLE):
-        col = lzo.piklib_unwrap(col)
+        col = _unwrap_lzo_or_lzw(col)
         if alp is not None:
-            alp = lzo.piklib_unwrap(alp)
-        if comp == COMP_LZO_RLE:
-            comp = COMP_RLE
+            alp = _unwrap_lzo_or_lzw(alp)
+        # DeCompress 0x1002c5d0: compression := (comp == 3) ? 4 : 0
+        comp = COMP_RLE if comp == COMP_LZO_RLE else COMP_NONE
     if comp == COMP_RLE:
         col = rle16(col, npx * 2)
         if alp is not None:

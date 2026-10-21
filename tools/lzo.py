@@ -11,10 +11,31 @@ Use `piklib_unwrap()` for that container, or `decompress()` for a raw stream.
 """
 import struct
 
-try:  # pragma: no cover - optional fast path
-    import lzo as _lzo  # type: ignore
-except Exception:  # noqa: BLE001
-    _lzo = None
+def _find_python_lzo():
+    """Return the python-lzo C extension if installed (not this file)."""
+    import importlib.util
+    import os
+    import sys
+    here = os.path.dirname(os.path.abspath(__file__))
+    saved = sys.path[:]
+    saved_mod = sys.modules.pop("lzo", None)
+    try:
+        sys.path = [p for p in sys.path if os.path.abspath(p or ".") != here]
+        spec = importlib.util.find_spec("lzo")
+        if spec is None or not spec.origin or spec.origin.endswith(".py"):
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        sys.path = saved
+        if saved_mod is not None:
+            sys.modules["lzo"] = saved_mod
+
+
+_lzo = _find_python_lzo()
 
 
 class LZOError(ValueError):

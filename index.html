@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reksio i UFO</title>
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --fg: #e8e6e1;
+        --muted: #9a978f;
+        --accent: #f2b33d;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, sans-serif;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+      canvas {
+        image-rendering: auto;
+        aspect-ratio: 4 / 3;
+        width: min(100vw, calc(100vh * 4 / 3));
+        background: #000;
+        cursor: default;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 16px;
+        background: var(--bg);
+      }
+      #boot[hidden] {
+        display: none;
+      }
+      #boot h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+      #boot p {
+        color: var(--muted);
+        max-width: 46ch;
+        margin: 0 auto 20px;
+        line-height: 1.5;
+      }
+      #boot button,
+      #boot label {
+        display: inline-block;
+        font: inherit;
+        font-weight: 600;
+        padding: 10px 18px;
+        border-radius: 8px;
+        border: 0;
+        background: var(--accent);
+        color: #1a1306;
+        cursor: pointer;
+      }
+      #boot input {
+        display: none;
+      }
+      #status {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 14px;
+        min-height: 1.5em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="screen" width="800" height="600"></canvas></div>
+    <div id="boot">
+      <div>
+        <h1>Reksio i UFO</h1>
+        <p>
+          Wskaż folder z zainstalowaną grą (ten, w którym jest <code>DANE</code> i <code>Wavs</code>).
+          Pliki są czytane lokalnie w przeglądarce i nigdzie nie są wysyłane.
+        </p>
+        <label>Wybierz folder gry<input id="picker" type="file" webkitdirectory multiple /></label>
+        <div id="status"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
