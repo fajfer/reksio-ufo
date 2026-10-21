@@ -634,7 +634,8 @@ export class Engine implements ScriptHost {
       if (key > bestKey) [best, bestKey] = [b, key];
     }
     for (const d of this.renderer.topmostFirst()) {
-      if (!(d instanceof Animo) || !d.asButton || d.priority < this.minHotspotPriority || !d.hitTest(x, y)) continue;
+      // Animo buttons hit-test their bounding rect (CXRect::IsInRect in onMouseMove).
+      if (!(d instanceof Animo) || !d.asButton || d.priority < this.minHotspotPriority || !d.inRect(x, y)) continue;
       const key = d.priority * 1e6 + d.order;
       if (key > bestKey) [best, bestKey] = [d, key];
       break;
@@ -647,8 +648,10 @@ export class Engine implements ScriptHost {
     const old = this.hover;
     this.hover = h;
     if (old instanceof Button) old.setState('standard');
+    if (old instanceof Animo) old.buttonState('ONFOCUSOFF');
     old?.signal('ONFOCUSOFF');
     if (h instanceof Button) h.setState('move');
+    if (h instanceof Animo) h.buttonState('ONFOCUSON');
     h?.signal('ONFOCUSON');
     this.setCursor(h ? 'ACTIVE' : 'ARROW');
   }
@@ -676,7 +679,9 @@ export class Engine implements ScriptHost {
         h.setState('click');
         h.signal('ONCLICKED');
       } else if (h) {
-        h.signal('ONCLICK');
+        // onClick (0x10037260): play ONCLICK, signal ONCLICK^<button> -> ONCLICK.
+        h.buttonState('ONCLICK');
+        h.signal('ONCLICK', btn, [btn]);
       }
     });
     c.addEventListener('mouseup', (e) => {

@@ -207,6 +207,23 @@ export class Animo extends Graphic {
   private acc = 0;
   /** Set by SETASBUTTON. */
   asButton = false;
+  buttonCursor = false;
+
+  /** Play a button-state event if the animation has it (Play is a no-op otherwise). */
+  playIfPresent(name: string): void {
+    if (this.findEvent(name)?.frames.length) this.play(name);
+  }
+
+  /**
+   * Button-state animations (CMC_Animo onFoncusOn 0x10037720, onMouseMove
+   * 0x10036f80, onClick 0x10037260): ONFOCUSON / ONFOCUSOFF play unless
+   * ONCLICK is playing; a click plays ONCLICK.
+   */
+  buttonState(state: 'ONFOCUSON' | 'ONFOCUSOFF' | 'ONCLICK'): void {
+    if (state !== 'ONCLICK' && this.playing && this.event?.name === 'ONCLICK') return;
+    if (state === 'ONCLICK' && this.playing && this.event?.name === 'ONCLICK') return;
+    this.playIfPresent(state);
+  }
   hovered = false;
 
   constructor(engine: Engine, def: ObjectDef) {
@@ -257,19 +274,26 @@ export class Animo extends Graphic {
     this.method('GETCURRFRAMEPOSX', () => Value.int(this.currentImage()?.x ?? 0));
     this.method('GETCURRFRAMEPOSY', () => Value.int(this.currentImage()?.y ?? 0));
     this.method('GETMAXWIDTH', () => Value.int(Math.max(0, ...(this.ann?.images.map((i) => i.width) ?? [0]))));
+    // CMC_Animo::setAsButton (0x10037810) stores the flags and plays ONNOEVENT.
     this.method('SETASBUTTON', (a) => {
       this.asButton = a.length ? argValue(a[0]).toBool() : true;
+      this.buttonCursor = a.length > 1 ? argValue(a[1]).toBool() : false;
+      if (this.asButton) this.playIfPresent('ONNOEVENT');
     });
+    // ISNEAR(obj, percent): CGraphicsObject::isNear (0x1002a900) intersects the
+    // two bounding boxes and is true when the overlap covers at least `percent`
+    // of this object's area (multiplier assumed to be 100).
     this.method('ISNEAR', (a) => {
       const other = this.engine.find(str(a[0]));
-      const dist = int(a[1]);
+      const pct = argValue(a[1]).toDouble();
       if (!(other instanceof Graphic)) return Value.bool(false);
-      const b1 = this.bounds();
-      const b2 = other.bounds();
-      if (!b1 || !b2) return Value.bool(false);
-      const dx = b1.x + b1.w / 2 - (b2.x + b2.w / 2);
-      const dy = b1.y + b1.h / 2 - (b2.y + b2.h / 2);
-      return Value.bool(Math.hypot(dx, dy) <= dist);
+      const b1 = this.bounds() ?? this.shapeBounds();
+      const b2 = other.bounds() ?? other.shapeBounds();
+      if (!b1 || !b2 || !b1.w || !b1.h) return Value.bool(false);
+      const w = Math.min(b1.x + b1.w, b2.x + b2.w) - Math.max(b1.x, b2.x);
+      const h = Math.min(b1.y + b1.h, b2.y + b2.h) - Math.max(b1.y, b2.y);
+      if (w <= 0 || h <= 0) return Value.bool(false);
+      return Value.bool(((w * h) * 100) / (b1.w * b1.h) >= pct);
     });
   }
 
@@ -285,7 +309,10 @@ export class Animo extends Graphic {
     this.ann = parseAnn(this.buf);
     this.sprites = this.ann.images.map(() => null);
     if (!this.props.has('FPS') && this.ann.fps) this.fps = this.ann.fps;
-    this.event = this.ann.events[0] ?? null;
+    // An unplayed animo rests on frame 0 of its first event that has frames
+    // (inferred: scripts HIDE visible animos in ONINIT, and the platform levels'
+    // never-played MASKA probe needs its MASKA frame offsets).
+    this.event = this.ann.events.find((e) => e.frames.length) ?? this.ann.events[0] ?? null;
     this.resourcesReady();
     for (const c of this.clones) {
       if (c instanceof Animo && !c.ann) {
