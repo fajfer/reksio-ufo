@@ -14,6 +14,8 @@ export function normalizePath(p: string): string {
 
 export interface GameFS {
   has(path: string): boolean;
+  /** Normalized paths of the files directly inside a directory. */
+  list(dir: string): string[];
   read(path: string): Promise<Uint8Array>;
   /** Object URL / fetchable URL for streaming media (audio). */
   url(path: string): Promise<string>;
@@ -37,6 +39,11 @@ export class HttpFS implements GameFS {
 
   has(path: string): boolean {
     return this.index.has(normalizePath(path));
+  }
+
+  list(dir: string): string[] {
+    const prefix = normalizePath(dir).replace(/\/$/, '') + '/';
+    return [...this.index.keys()].filter((k) => k.startsWith(prefix) && !k.slice(prefix.length).includes('/'));
   }
 
   async url(path: string): Promise<string> {
@@ -71,6 +78,11 @@ export class FileListFS implements GameFS {
 
   has(path: string): boolean {
     return this.index.has(normalizePath(path));
+  }
+
+  list(dir: string): string[] {
+    const prefix = normalizePath(dir).replace(/\/$/, '') + '/';
+    return [...this.index.keys()].filter((k) => k.startsWith(prefix) && !k.slice(prefix.length).includes('/'));
   }
 
   private file(path: string): File {

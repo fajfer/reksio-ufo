@@ -138,9 +138,7 @@ class SceneObj extends GameObject {
 class CnvLoader extends GameObject {
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
-    this.method('LOAD', (a) => {
-      void engine.loadExtraCnv(argValue(a[0]).toStr());
-    });
+    this.method('LOAD', (a) => engine.loadExtraCnv(argValue(a[0]).toStr()));
     this.method('RELEASE', () => undefined);
   }
 }
@@ -192,6 +190,8 @@ export class Engine implements ScriptHost {
   private episode!: Container;
   private scene: Container | null = null;
   private pendingScene: string | null = null;
+  /** Extra .CNV files of the current scene dir, pre-read so CNVLOADER^LOAD is synchronous. */
+  private extraCnv = new Map<string, ObjectDef[]>();
   private switching = false;
   private orderCounter = 0;
   private returnSlots: (Value | undefined)[] = [];
@@ -500,6 +500,13 @@ export class Engine implements ScriptHost {
     // Episode/app graphics persist across scenes.
     for (const c of [this.app, this.episode]) for (const o of c.list) if (o instanceof Graphic) this.renderer.add(o);
 
+    this.extraCnv.clear();
+    const mainCnv = Project.cnvFor(this.resolver, info.path, info.name);
+    const extras = this.fs.list(Project.dir(info.path)).filter((f) => f.endsWith('.cnv') && f !== (mainCnv && normalizePath(mainCnv)));
+    await Promise.all(
+      extras.map(async (f) => this.extraCnv.set(f, parseDefinitions(decodeText(await this.fs.read(f))))),
+    );
+
     const container = new Container(info.name);
     this.scene = container;
     const objs = [...this.builtins(container), ...this.createObjects(await this.project.loadObjects(this.resolver, info.path, info.name), container)];
@@ -516,15 +523,22 @@ export class Engine implements ScriptHost {
     console.info(`Scene ${info.name}: ${objs.length} objects`);
   }
 
-  async loadExtraCnv(file: string): Promise<void> {
-    if (!this.scene) return;
-    const path = this.resolver.resolve(file);
-    if (!path) return this.warn(`CNVLOADER: missing ${file}`);
+  /**
+   * CNVLOADER^LOAD: objects are created immediately (scripts use them on the
+   * next line); their resources load in the background and ONINIT fires once
+   * they are ready.
+   */
+  loadExtraCnv(file: string): void {
     const container = this.scene;
-    const objs = this.createObjects(parseDefinitions(decodeText(await this.fs.read(path))), container);
-    await this.loadAll(objs);
-    if (this.scene !== container) return;
-    for (const o of objs) o.init();
+    if (!container) return;
+    const path = this.resolver.resolve(file);
+    const defs = path ? this.extraCnv.get(normalizePath(path)) : undefined;
+    if (!defs) return this.warn(`CNVLOADER: missing ${file}`);
+    const objs = this.createObjects(defs, container);
+    void this.loadAll(objs).then(() => {
+      if (this.scene !== container) return;
+      for (const o of objs) o.init();
+    });
   }
 
   // --- main loop -------------------------------------------------------------

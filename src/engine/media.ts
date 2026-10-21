@@ -222,6 +222,11 @@ export class Animo extends Graphic {
     this.sprites = this.ann.images.map(() => null);
     if (!this.props.has('FPS') && this.ann.fps) this.fps = this.ann.fps;
     this.event = this.ann.events[0] ?? null;
+    if (this.pendingPlay !== null) {
+      const ev = this.pendingPlay;
+      this.pendingPlay = null;
+      this.play(ev);
+    }
   }
 
   /** Clones share the parsed file and decoded sprites. */
@@ -243,7 +248,15 @@ export class Animo extends Graphic {
     return Number.isInteger(idx) ? (this.ann.events[idx] ?? null) : null;
   }
 
+  /** PLAY requested before the ANN finished loading (CNVLOADER objects). */
+  private pendingPlay: string | null = null;
+
   play(name: string): void {
+    if (!this.ann && this.prop('FILENAME')) {
+      this.pendingPlay = name;
+      this.visible = true;
+      return;
+    }
     const ev = this.findEvent(name);
     if (!ev) {
       this.engine.warn(`ANIMO ${this.name}: no event ${name}`);
