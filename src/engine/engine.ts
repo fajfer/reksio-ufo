@@ -228,16 +228,22 @@ export class Engine implements ScriptHost {
   keyword(name: string, args: Arg[], ctx: Ctx): CallResult {
     switch (name) {
       case 'IF': {
-        // @IF("VAR","OP","VALUE","BEH_TRUE","BEH_FALSE") — inferred, see docs.
-        const v = this.find(argValue(args[0]).toStr())?.asValue() ?? Value.str('');
-        const rhs = literal(argValue(args[2]).toStr());
+        // @IF(A, OP, B, THEN, ELSE): keyword runner 0x10066590 case 1 ->
+        // sub_10066750 -> CMC_Condition::valid(container, A, OP, B)
+        // (0x10060ab0). A and B are evaluated like CONDITION operands.
+        const operand = (a: Arg | undefined) => argValue(this.interp.resolveParameter(argValue(a).toStr(), { self: null, params: [] }));
+        const lhs = operand(args[0]);
+        const rhs = operand(args[2]);
         const op = argValue(args[1]).toStr();
-        const cmp = v.compare(rhs);
+        const cmp = lhs.compare(rhs);
+        const eq = lhs.equals(rhs);
         const ok =
-          op === '_' ? v.equals(rhs) : op === '!_' ? !v.equals(rhs) : op === '<' ? cmp < 0 : op === '>' ? cmp > 0 : op === '<_' ? cmp <= 0 : op === '>_' ? cmp >= 0 : false;
-        const beh = argValue(args[ok ? 3 : 4]).toStr();
-        if (beh) return this.runHandler(beh, ctx.self as GameObject | null, ctx.params);
-        return undefined;
+          op === '_' ? eq : op === '!_' || op === '<>' ? !eq : op === '<' ? cmp < 0 : op === '<_' ? cmp <= 0 : op === '>' ? cmp > 0 : op === '>_' ? cmp >= 0 : false;
+        // A branch naming an object runs it; other text runs as inline code.
+        const branch = argValue(args[ok ? 3 : 4]).toStr();
+        if (!branch) return undefined;
+        if (this.find(branch)) return this.runHandler(branch, ctx.self as GameObject | null, ctx.params);
+        return this.interp.runCode(`{${branch}}`, ctx);
       }
       case 'RETURN':
         if (this.returnSlots.length) this.returnSlots[this.returnSlots.length - 1] = argValue(args[0]);

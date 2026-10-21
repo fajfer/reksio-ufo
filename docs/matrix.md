@@ -54,6 +54,40 @@ Name -> id pairs put into a `CHashtable` via `CStringHashCode`/`CInteger(id)`:
 | 0x14 | GETCELLOFFSETATPOS | 0x15/0x16 | GETCELLGFX/SETCELLGFX |
 | 0x18.. | GET/SET CELL LEFT/RIGHT/UP/DOWN LINK, GETCELLWITHGFX | | |
 
+## Object structure (Matrix.dll) [obs]
+
+- `CMatrix::resolve` (0x10001250) compares TYPE with "MATRIX", then
+  `new(0x4c)` + script-object ctor 0x10005860 (vtable 0x1000dbb4, base
+  `CMC_Object(container, element, 0x2712)`).
+- Ctor 0x10005860 reads `SIZE` and `BASEPOS` with
+  `CMElement::getPropertyPointValue`, `CELLWIDTH`/`CELLHEIGHT` with
+  `getPropertyIntValue`, then `new(0x50)` + model ctor 0x100022e0 stored at
+  object+0x48 (returned by object vtable slot 0x90 = 0x10005fd0).
+- Model ctor 0x100022e0 `(window, owner, W, H, baseX, baseY, cellW, cellH)`:
+  model+0x34=W, +0x38=H, +0x3c=baseX, +0x40=baseY, +0x48=cellW, +0x4c=cellH;
+  +0xc = `byte[W*H]` (cell codes), +0x10 = second `byte[W*H]`,
+  +0x44 = array of W*H 0x2c-byte cell records (ctor 0x10003df0), whose first
+  two dwords are the cell pixel position: `x = baseX + col*cellW`,
+  `y = baseY + row*cellH`; cell index = `row*W + col`.
+  Finally 0x10001f00 zero-fills the code array (W*H bytes).
+- Model vtable 0x1000d5b0.
+
+## Runner dispatch (0x100084a0, jump table 0x100087f0) [obs]
+
+`run(id, object, container, params)`; every handler fetches the model via
+object vtable+0x90 and calls a model virtual:
+
+| method | handler | model call |
+|---|---|---|
+| TICK | 0x10006b50 | vt+0x04 (0x10002810), no args, returns nothing |
+| NEXT | 0x10006b70 | vt+0x08 (0x100029e0), returns int in a new CMC_Integer |
+| MOVE (2 args) | 0x10006ba0 | vt+0x0c (0x10002c40)(a0, a1) |
+| MOVE (4 args) | 0x10006ba0 | vt+0x10 (0x10002c10)(CXSize(a0,a1), CXSize(a2,a3)) |
+| SET (2 args) | 0x10006c90 | vt+0x14 (0x10002cc0)(a0, a1) |
+| SET (3 args) | 0x10006c90 | vt+0x18 (0x10002ca0)(CXSize(a0,a1), a2) |
+| CLEAR | 0x10006d60 | vt+0x78 (0x10003a50) |
+| LOAD | 0x10006ae0 | object vt+0x40(params,0) -> string, model vt+0x90 |
+
 ## Script definition (S44_511_PODKOP)
 
 ```

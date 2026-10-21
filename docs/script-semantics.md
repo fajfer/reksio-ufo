@@ -169,10 +169,21 @@ Global runner keyword table (strings at 0x1014a860–0x1014a8ec), **observed**
 names: `IF, WHILE, RETURN, MSGBOX, BOOL, INT, DOUBLE, STRING, LOOP, RUNONTIMER,
 CREATE, GETAPPLICATIONNAME, GETCURRENTSCENE, ONEBREAK, CONTINUE`.
 
-This game uses only `@IF`, 9 times, always as `@IF("VAR","OP","VALUE","BEH_TRUE","BEH_FALSE")`.
-The handler sits behind an unnamed runner (hash setup sub_10065320) and was not
-traced. Implemented as **inferred**:
+This game uses only `@IF`, 9 times, as `@IF("A","OP","B","THEN","ELSE")`.
 
-- VAR is a variable name and VALUE is resolved as a literal.
-- `_` means equal and `!_` means not equal.
-- It runs BEH_TRUE or BEH_FALSE; an empty name means nothing to run.
+The keyword runner is `pDummyRunner` (vtable 0x1014a810, `run(id)` at
+0x10066590). IF is id 1, handled by `sub_10066750` — **observed**:
+
+- Five arguments → static `CMC_Condition::valid(container, A, OP, B)`
+  (0x10060ab0). OP strings map to condition operators:
+  - `_` → EQUAL
+  - `!_`, `<>` → NOTEQUAL
+  - `<` → LESS, `<_` → LESSEQUAL
+  - `>` → GREATER, `>_` → GREATEREQUAL
+  - `?` → id 7, meaning unknown
+- A and B are evaluated as operand expressions, the same way as CONDITION
+  operands. `"VAR"` names a variable, and `""OPEN""` ends up as the literal `OPEN`.
+- The chosen branch: if it names an existing object, that object (a behaviour)
+  is run. Otherwise a temporary behaviour is built from the text, so inline
+  code works.
+- A one-argument form parses a whole condition string; the game does not use it.
