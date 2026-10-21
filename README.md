@@ -34,8 +34,11 @@ is imported, so saves from the original game carry over.
 A service worker (`public/sw.js`) plus a web app manifest
 (`public/manifest.webmanifest`, icons in `public/icons/`) make the site:
 
-- **installable** — "Zainstaluj aplikację" on desktop Chrome/Edge, Share →
-  "Add to Home Screen" on mobile (an iOS hint is shown in the boot panel);
+- **installable** — Chrome/Edge show a "Zainstaluj aplikację" button (driven
+  by `beforeinstallprompt`). Safari and Firefox never fire that event, so the
+  boot panel shows a matching instruction instead: Share → "Add to Home
+  Screen" (iOS), File → "Add to Dock" (Safari 17+), menu → "Install"
+  (Firefox Android); Firefox desktop cannot install web apps at all;
 - **playable offline** — with the install served at `/game/`, the boot panel
   offers *Pobierz grę i graj offline*: every game file (plus the app shell)
   is copied into Cache Storage, after which the site boots and plays with no

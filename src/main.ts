@@ -6,31 +6,34 @@ const boot = document.getElementById('boot') as HTMLDivElement;
 const status = document.getElementById('status') as HTMLDivElement;
 const picker = document.getElementById('picker') as HTMLInputElement;
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
-const pickLabel = document.getElementById('pick') as HTMLLabelElement;
 const playButton = document.getElementById('play') as HTMLButtonElement;
 const offlineButton = document.getElementById('offline') as HTMLButtonElement;
 const installButton = document.getElementById('install') as HTMLButtonElement;
 const progress = document.getElementById('dl') as HTMLProgressElement;
-const iosHint = document.getElementById('ios-hint') as HTMLDivElement;
+const installHint = document.getElementById('install-hint') as HTMLDivElement;
 const query = new URLSearchParams(location.search);
 
 /** Browsers only start audio after a user gesture, so wait for a click. */
 function waitForPlay(): Promise<void> {
   if (query.has('autostart')) return Promise.resolve();
-  pickLabel.hidden = true;
+  // The folder picker stays available: a server-side install is offered as
+  // "Graj", but players can still point at their own copy.
   playButton.hidden = false;
-  status.textContent = '';
   return new Promise((resolve) => playButton.addEventListener('click', () => resolve(), { once: true }));
 }
 
+/** Each start() supersedes the previous one (e.g. picking a folder while the
+ * server install is still waiting for "Graj"). */
+let startGeneration = 0;
+
 async function start(fs: GameFS): Promise<void> {
+  const generation = ++startGeneration;
   if (!fs.has('DANE/Application.def')) {
     status.textContent = 'To nie jest folder gry — brakuje DANE/Application.def.';
-    pickLabel.hidden = false;
-    playButton.hidden = true;
     return;
   }
   await waitForPlay();
+  if (generation !== startGeneration) return; // another choice won
   boot.hidden = true;
   const engine = new Engine(fs, canvas);
   engine.audio.resume();
@@ -72,11 +75,30 @@ installButton.addEventListener('click', async () => {
 
 window.addEventListener('appinstalled', () => {
   installButton.hidden = true;
+  installHint.hidden = true;
   status.textContent = 'Gra została zainstalowana.';
 });
 
-// iOS Safari has no install prompt; point at the Share sheet instead.
-if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone()) iosHint.hidden = false;
+// Only Chromium fires beforeinstallprompt: Safari and Firefox install from
+// their own menus (Firefox desktop cannot install web apps at all), so show
+// browser-appropriate instructions instead of a button that never appears.
+const ua = navigator.userAgent;
+const isFirefox = /firefox|fxios/i.test(ua);
+const isAndroid = /android/i.test(ua);
+const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+const isSafariDesktop = /safari/i.test(ua) && !/chrome|chromium|crios|fxios|edg|opr/i.test(ua) && !isIOS;
+
+const hint =
+  standalone() ? null
+  : isIOS ? 'Aby zainstalować: Udostępnij → „Dodaj do ekranu początkowego”.'
+  : isFirefox && isAndroid ? 'Aby zainstalować: menu ⋮ → „Zainstaluj” (Dodaj do ekranu głównego).'
+  : isFirefox ? 'Firefox na komputerze nie obsługuje instalowania aplikacji internetowych — użyj Chrome, Edge lub Safari.'
+  : isSafariDesktop ? 'Aby zainstalować: w Safari 17+ menu Plik → „Dodaj do Docku”.'
+  : null;
+if (hint) {
+  installHint.textContent = hint;
+  installHint.hidden = false;
+}
 
 // --- offline copy of the game ------------------------------------------------
 
