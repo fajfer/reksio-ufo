@@ -7,6 +7,7 @@ import { decodeImg } from '../formats/img.ts';
 import {
   BREAK,
   Interpreter,
+  splitArgs,
   argValue,
   type Arg,
   type CallResult,
@@ -297,7 +298,10 @@ export class Engine implements ScriptHost {
       if (h) this.warnOnce(`Handler ${h} is not a behaviour`);
       return undefined;
     }
-    const args = m[2] !== undefined ? m[2].split(',').map((s) => argValue(this.interp.resolveParameter(s, { self, params })).toStr()) : params;
+    // Handler arguments are passed as raw text, quotes included, and substituted
+    // into the behaviour textually: BEH("ANIMOKRET","4A") must give $2 = "4A"
+    // (a STRING), not the integer 4 (S42 Rube Goldberg chain; inferred).
+    const args = m[2] !== undefined ? splitArgs(m[2].replace(/\s+/g, '')) : params;
     return beh.run(self, args, true);
   }
 
