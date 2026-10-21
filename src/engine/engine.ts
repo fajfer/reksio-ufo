@@ -651,9 +651,16 @@ export class Engine implements ScriptHost {
     if (h === this.hover) return;
     const old = this.hover;
     this.hover = h;
-    if (old instanceof Button) old.setState('standard');
-    if (old instanceof Animo) old.buttonState('ONFOCUSOFF');
-    old?.signal('ONFOCUSOFF');
+    // CMC_Animo::onMouseMove (0x10036f80) only reacts while the animo is still
+    // an enabled button: one disabled/hidden by a click handler stays put.
+    const liveAnimo = (a: Button | Animo | null): a is Animo => a instanceof Animo && a.asButton && a.visible;
+    if (old instanceof Button) {
+      old.setState('standard');
+      old.signal('ONFOCUSOFF');
+    } else if (liveAnimo(old)) {
+      old.buttonState('ONFOCUSOFF');
+      old.signal('ONFOCUSOFF');
+    }
     if (h instanceof Button) h.setState('move');
     if (h instanceof Animo) h.buttonState('ONFOCUSON');
     h?.signal('ONFOCUSON');
