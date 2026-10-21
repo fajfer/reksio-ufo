@@ -16,6 +16,7 @@ import {
   type ScriptObject,
 } from '../script/interpreter.ts';
 import { Value, literal } from '../script/values.ts';
+import { applySceneTweaks } from '../mods.ts';
 import { AudioSystem, Voice } from './audio.ts';
 import { normalizePath, PathResolver, type GameFS } from './fs.ts';
 import { IniStore } from './ini.ts';
@@ -192,6 +193,8 @@ export class Engine implements ScriptHost {
   paused = false;
   /** Log every fired handler (?trace=1). */
   trace = false;
+  /** Play the original balance: skip the tweaks from src/mods.ts (?classic=1). */
+  classic = false;
 
   private app!: Container;
   private episode!: Container;
@@ -528,7 +531,9 @@ export class Engine implements ScriptHost {
 
     const container = new Container(info.name);
     this.scene = container;
-    const objs = [...this.builtins(container), ...this.createObjects(await this.project.loadObjects(this.resolver, info.path, info.name), container)];
+    const defs = await this.project.loadObjects(this.resolver, info.path, info.name);
+    if (!this.classic) applySceneTweaks(info.name, defs);
+    const objs = [...this.builtins(container), ...this.createObjects(defs, container)];
     const bg = info.background ? this.setBackground(info.background) : Promise.resolve();
     await Promise.all([bg, this.loadAll(objs)]);
     this.playSceneMusic();

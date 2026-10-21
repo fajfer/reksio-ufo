@@ -39,6 +39,7 @@ async function start(fs: GameFS): Promise<void> {
   engine.audio.resume();
   (window as unknown as { engine: Engine }).engine = engine;
   engine.trace = query.has('trace');
+  engine.classic = query.has('classic');
   // Test fast-forward: game clock and audio run N times faster.
   engine.audio.speed = Math.max(1, Math.min(16, Number(query.get('speed')) || 1));
   const scene = query.get('scene')?.toUpperCase();

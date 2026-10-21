@@ -20,6 +20,12 @@ game. Useful query parameters:
 
 - `?scene=MENUGLOWNE` — start at a given scene (names from `DANE/Application.def`)
 - `?trace=1` — log every fired event handler to the console
+- `?classic=1` — play the original balance (skip the gameplay tweaks below)
+
+The scripts are the original ones; a few documented gameplay tweaks live in
+`src/mods.ts` (currently: Alien Invaders re-throw cooldown of 0.2 s instead of
+one throw per beetroot flight). `?classic=1` turns them off; edit the `ELAPSE`
+value there to tune the cooldown.
 
 `npm run build` produces a static site in `dist/`. Deployed without `/game/`,
 it shows the folder picker; served with the install at `/game/` it can also offer the offline download described below.
