@@ -16,91 +16,66 @@ REKSIO_GAME_DIR="/path/to/Reksio i UFO" npm run dev   # or symlink the install t
 ```
 
 The dev server serves the install at `/game/` and boots straight into the
-game. Useful query parameters:
+game. The original scripts run unchanged. The only gameplay changes are the
+Alien Invaders tweaks in `src/mods.ts`; `?classic=1` restores the original
+balance. The exact changes and constants are in the
+[Alien Invaders spec](.ai/specs/implemented/2026-10-21-alien-invaders-tweaks.md).
 
-- `?scene=MENUGLOWNE` — start at a given scene (names from `DANE/Application.def`)
-- `?trace=1` — log every fired event handler to the console
-- `?classic=1` — play the original balance (skip the gameplay tweaks below)
+Debug and test parameters (`?scene`, `?trace`, `?speed`) are documented in the
+[playthrough testing spec](.ai/specs/implemented/2026-10-21-playthrough-testing.md).
 
-The scripts are the original ones; a few documented gameplay tweaks live in
-`src/mods.ts`, all in Alien Invaders: a 0.2 s re-throw cooldown with up to 8
-beetroots in flight at once (each throw takes a free clone of `ANIMOBURAK`
-instead of restarting the one beetroot), throws only when clicking near Reksio
-(clicking away just walks him there — handy on touch screens), and a "POMIŃ"
-skip button on the right for the first 5 seconds. `?classic=1` turns them off;
-each tweak's constants (cooldown, pool size, tap radius, skip time) sit next
-to its code.
+## Building and hosting
 
 `npm run build` produces a static site in `dist/`. Deployed without `/game/`,
-it shows the folder picker; served with the install at `/game/` it can also offer the offline download described below.
-`npm run preview` serves the build together with the install, handy for
-testing that flow locally.
-For static hosting, `npm run game-manifest -- <install>` writes the
-`manifest.json` (a JSON array of the install's file paths) next to the game
-files — the dev and preview servers generate it on the fly.
+it shows the folder picker; served with the install at `/game/` it can also
+offer the offline download. `npm run preview` serves the build together with
+the install.
 
-Progress is saved in `localStorage`. On the first run, the install's `Ufo.ini`
-is imported, so saves from the original game carry over.
+For static hosting, run `npm run game-manifest -- <install>` so the app can
+find the game files; the dev and preview servers do this on the fly. The full
+delivery contract is in the
+[static and offline delivery spec](.ai/specs/implemented/2026-10-21-static-and-offline-delivery.md).
 
-## Offline & installing
+Saves from the original game carry over on the first run, and progress stays
+in the browser.
 
-A service worker (`public/sw.js`) plus a web app manifest
-(`public/manifest.webmanifest`, icons in `public/icons/`) make the site:
+## Offline and installing
 
-- **installable** — Chrome/Edge show a "Zainstaluj aplikację" button (driven
-  by `beforeinstallprompt`). Safari and Firefox never fire that event, so the
-  boot panel shows a matching instruction instead: Share → "Add to Home
-  Screen" (iOS), File → "Add to Dock" (Safari 17+), menu → "Install"
-  (Firefox Android); Firefox desktop cannot install web apps at all;
-- **playable offline** — with the install served at `/game/`, the boot panel
-  offers *Pobierz grę i graj offline*: every game file (plus the app shell)
-  is copied into Cache Storage, after which the site boots and plays with no
-  network at all. The button turns into *Usuń pobraną grę* once it is done.
-  The app shell alone is cached on the first online visit, so an installed
-  app always opens offline; the game itself then comes from the download.
-  iOS has no folder picker (`webkitdirectory`), so the boot panel hides it
-  and points at „Graj” / the offline download instead.
+The site can be installed as an app and plays offline. Chrome/Edge show an
+install button, Safari and Firefox use their own menus (desktop Firefox cannot
+install web apps), and iOS uses the served install or the offline download
+because it has no folder picker.
 
-Offline support is production-only: the dev server stays untouched (no
-service worker, no stale caches).
+With the install served at `/game/`, *Pobierz grę i graj offline* copies every
+game file into the browser's offline cache; the button then becomes *Usuń
+pobraną grę*. Offline support is production-only, so the dev server stays
+untouched.
 
-## Layout
+## Documentation
 
-| Path | What |
-|---|---|
-| `src/formats/` | Decoders: CNV cipher and definitions, SEQ, PIK images, NVP animations, LZO1X, RLE, legacy LZW |
-| `src/script/` | String-based script interpreter ported from the engine's own algorithms |
-| `src/engine/` | Runtime: containers, signals, variables, behaviours, ANIMO/IMAGE/SOUND/BUTTON/SEQUENCE, input, main loop |
-| `src/offline.ts` | "Download the game" for offline play (Cache Storage; used with `public/sw.js`) |
-| `public/` | Web app manifest, service worker and icons (the icon set is scaled from `ReksioUfo.exe`'s own icon by `tools/make-icons.ts`) |
-| `docs/` | Semantics recovered from PIKLIB8.dll with REA, with procedure addresses and observed/inferred markers |
-| `tools/annformat.md` | ANN byte layout |
-| `tools/drive.ts` | Headless Chrome driver (click/key/screenshot) for testing |
-| `tools/game-manifest.ts` | Writes the file-list manifest for a statically served install (`npm run game-manifest`) |
-| `tools/sweep.sh` | Load every scene and collect warnings plus screenshots |
-| `tools/fuzz.ts` | Click every active hotspot in every scene; report warnings, exceptions, transitions |
-| `docs/matrix.md`, `docs/filters-fonts.md` | MATRIX (Matrix.dll), rotation/fade filters, FNT fonts |
+- [Architecture decisions](.ai/adr/README.md) — decisions and the port quality gates future changes must keep true.
+- [Specs](.ai/specs/README.md) — implemented features, validation evidence and open work.
+- [Engine semantics](docs/script-semantics.md), [object semantics](docs/object-semantics.md), [filters and fonts](docs/filters-fonts.md), [MATRIX](docs/matrix.md) — behaviour recovered from the DLLs, with addresses and observed/inferred markers.
+- [Playthrough testing](docs/playthrough/README.md) — headless sessions and chapter walkthroughs.
+- [`tools/annformat.md`](tools/annformat.md) — ANN byte layout.
+- [`AGENTS.md`](AGENTS.md) — mandatory entry point for automated agents.
 
 ## Tests
 
 ```sh
-npm test          # format decoders against the real data (set REKSIO_DATA to DANE/), interpreter semantics
+npm test          # decoders (set REKSIO_DATA to DANE/), interpreter, filters/fonts and MATRIX tests
 npm run typecheck
 ```
 
 ## Status
 
-- All 102 encrypted scripts, 707 images and 805 animations decode.
-- All 90 scenes load and render.
-- Play-tested headlessly with `tools/drive.ts` / `tools/fuzz.ts`:
-  - the intro and main menu;
-  - chapter selection into gameplay;
-  - dialogue with lip-sync;
-  - Space Invaders, Pac-Man, the car choice → race (with sprite rotation),
-    and the digging game (`MATRIX`, from the Matrix.dll plug-in).
-- Engine semantics are taken from the DLLs, with addresses, in `docs/`.
-  Remaining inferences are marked there.
-- Known gaps:
-  - `ARIAL14.FNT`, named by the TEXT/FONT objects, is not part of this
-    install, so text uses a canvas font.
-  - Full start-to-finish playthroughs have not been done yet.
+The port boots and plays the original data. Headless playthroughs cover the
+intro, menus, dialogue and the main minigames; chapters 1–5, 7 and 8 are
+recorded.
+Chapter 6 and a fresh start-to-finish run remain, tracked in the
+[playthrough spec](.ai/specs/2026-10-21-complete-playthrough.md).
+
+Known gap: `ARIAL14.FNT` is not shipped with this install, so text uses a
+canvas fallback. Coverage counts, implementation details and validation
+evidence are in the
+[engine port spec](.ai/specs/implemented/2026-10-21-engine-port.md).
