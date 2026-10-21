@@ -44,3 +44,38 @@ Status: in progress. "observed" = seen in DLL/scripts/data; "inferred" = guess.
   - Then setSize(W,H) (vtable+0xd0) and `Move(cx - W/2, cy - H/2)` (vtable+0x6c, `0x1002aba0` = relative move) so the CENTER of the image stays fixed. Pivot = center of the frame's bounding box.
 - Frame observer `0x100a6060` (wrapper secondary vtable; called when the linked animo's frame changes): proceeds only if CURRENTFRAME (filter+0xd)==1. Keeps per-frame byte flags (applied?) at +0x18 indexed by frame, last frame at +0x1c. On frame change: if previous frame was filtered and CANUNDO (inner vtable+4 = `0x100013b0` returns +0xc), restores it via wrapper+0x34 (`sub_100a5480`: restores saved data ptr, alpha, size, position, +0xc4), clears its flag. For new frame, if not yet filtered: mark, if CANUNDO save a backup (wrapper+0x44), then call rotate (wrapper+0x24 -> `sub_1002e410`), then SetClippingRect.
   => CANUNDO=TRUE: rotation is non-destructive / absolute (re-applied from the pristine frame each time). Scripts always UNLINK -> set ANGLE -> LINK, so UNLINK restores the original and LINK re-applies with the new angle (inferred: LINK applies immediately to the current frame; TODO confirm in runner).
+
+## DLL: STATICFILTER runner methods (observed)
+- Runner method table built around 0x100a6d00 (method ids via CInteger), handlers:
+  - `sub_100a6a80` SETPROPERTY(name, value): both args toString'd, forwarded to the filter's property setter (`sub_10070f80` -> inner setProperty chain above).
+  - `sub_100a6b10` LINK(objName): looks up the CGraphicsObject by name; Invalidate; filter-wrapper vtable+0x8 (`sub_1006eb50`) attach(graphic, cmcObject); Invalidate.
+  - `sub_100a6bd0` UNLINK(objName): wrapper vtable+0x10 (`sub_1006ebd0`) detach(graphic).
+- Attach `sub_100a5bd0`: for ANIMO (type 0x7d0): takes the CURRENT frame's graphic, if CANUNDO saves a backup (wrapper+0x40), applies the filter immediately (wrapper+0x2c), registers a frame-change notifier (`CPlayable::addNotifier`, so later frames are filtered by observer 0x100a6060 when CURRENTFRAME), then `CAnimo::Set` to refresh. For IMAGE: if CANUNDO backup (+0x3c), apply once (+0x28).
+- Detach `sub_100a5d20`: removes notifier; if CURRENTFRAME and the current frame is flagged filtered, restores it; if CANUNDO restores all backups (+0x38/+0x30); Invalidate.
+- => Port semantics: LINK(anim) = attach a rotation transform {angle} to the animo (rendered every frame, any frame); UNLINK = remove it. Changing ANGLE while linked does NOT update the image in the original until relink (scripts always relink). Port may apply live; harmless.
+- Rotation is about the CENTER of each frame's own bitmap (frame w/2,h/2), not the animo position/hotspot. Since frame image offset moves by (w/2-W/2, h/2-H/2), the visual center remains at framePos + (w/2, h/2).
+
+## DLL: FILTER (dynamic) object (observed)
+- `sub_1006dbb0` builds a FILTER by ACTION: FADEIN, FADEOUT, FADEINOUT, PATH, WATER, WAVING.
+- Fade parameter block (0x28 bytes, base init `sub_1006f080(mode)`: SPEED double at +0x10 default 0.1 (0x3fb999999999999a), mode at +4):
+  - FADEIN: mode 1, START(+0x18)=0.0, END(+0x20)=255.0.  FADEOUT: mode 2, START=255.0, END=0.0. FADEINOUT: mode 1 with FADEIN params (wrapper vtable 0x1014ac2c; TODO exact in/out switching).
+  - Property setter `sub_1006f0b0`: SPEED / START / END (doubles), else base `sub_1006f200`.
+- Per-linked-object state holds the current value (double at state+8), initialised from START (inferred).
+- Step FADEIN `sub_10020270`: cur += SPEED; if cur >= END: cur = END, returns done=1. If trunc(cur) changed, graphic->SetOpacity(trunc(cur)) (vtable+0x3c) + Invalidate.
+- Step FADEOUT `sub_10020300`: cur -= SPEED, clamped at END (0); SetOpacity(trunc(cur)) when integer part changes.
+- Step is called per engine tick (ONTICK event string exists near; TODO: tick rate). Strings in that area: ONTICK, END, START, SPEED, ONEATTIME, LOOPED, ISRUNNING, LINK, UNLINK.
+- Script usage: FFADEIN (ACTION=FADEOUT, s65_Zamek) is declared but never referenced, so the port only needs a stub with LINK/UNLINK/SETPROPERTY and a best-effort opacity animation.
+
+## DLL: FONT file format (.FNT) (observed from CSimpleFont6::Load(CFile*) `0x100d2a80` and writer CSimpleFont6::create `0x100d2e00`)
+- Header 20 bytes, 5 x int32 LE: h0 = 0x46 (written by create; ignored by Load), h1 = atlas width -> this+0x38, h2 = atlas height -> this+0x3c, h3 -> this+0x48 (create writes 0x10; inferred bpp=16), h4 = N letters -> this+0x14c.
+- Then: `chars[N]` (u8 char codes, this+0x148; create takes each glyph's first char of its ANIMO event name), `kern[N*N]` (u8, this+0x13c; create stores `1 - getKerning(i,j)` at [i*N + j]), `leftOff[N]` (u8, +0x140: empty columns on the left, from getLeftOffset), `rightOff[N]` (u8, +0x144: empty columns on the right), then pixels `W*H*2` bytes (16-bit, this+0x44 data ptr; CAnimo::Convert(16) => RGB565 inferred), then alpha `W*H` bytes (this+0xb0 alpha ptr) — Load reads sizes via Width()/Height() vtable 0xc4/0xc8.
+- Atlas layout (create): glyph k's frame (gw x gh, padded 1px clear border) is copied to columns [k*gw, (k+1)*gw) of a single W=N*gw, H=gh image. So glyph width = W / N.
+- Font object: FONT TYPE with property `DEF_<FAMILY>_<STYLE>_<SIZE>=<file>` (e.g. DEF_ARIAL_STANDARD_14=ARIAL14.FNT). ARIAL14.FNT is NOT present in the game install, so the port must fall back to a canvas font.
+
+## DLL: glyph metrics and drawing (observed)
+- All per-letter tables are read as SIGNED int8 (movsx). `findLetter` `0x100d36c0`: linear search of chars[] for the byte, -1 if absent.
+- `getLetterWidth(prev, ch)` `0x100d3930`: ch==' ' -> getLetterWidth(0,'l') (space is as wide as 'l'); ch=='~' -> 1; ch not found -> 0; else gw - right[i] - left[i] - (prevIdx>=0 ? kern[N*prevIdx + i] : 0), gw = W / N (int div).
+- `getRealLetterWidth(ch)` `0x100d3ba0`: same without kerning.
+- `getKerning(a,b)` `0x100d3b30`: kern[N*idx(a) + idx(b)].
+- `drawLetter(prev, ch, x, y)` `0x100d3700`: for a found glyph i: srcX0 = i*gw + left[i]; w = gw - right[i] - left[i]; k = kern[N*prevIdx + i] (0 if no prev). Positions the whole atlas at (x - srcX0 - k, y) (vtable+0x64) and clips to atlas columns [srcX0, srcX0 + w) x [0, H), Redraw. So the glyph's visible columns land at screen x - k.
+  Returns advance = w - k + 2 (space: width('l') + 2; '~': 3; unknown char: 2). I.e. a fixed 2px letter spacing on top of the trimmed glyph width.

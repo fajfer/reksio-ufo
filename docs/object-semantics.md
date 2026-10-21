@@ -86,17 +86,23 @@ PRIORITY. `createButton` (0x10055e00) then does the following — **observed**:
     0x1000bf10) stops, and fires ONFINISHED only when `b` is true.
     `STOP(FALSE)` is used 158 times in the scripts.
 
-## SEQUENCE (inferred from data)
+## SEQUENCE
 
-- `.SEQ` nodes: PARAMETER (`SEQEVENT:NAME = n` selects child n),
-  SEQUENCE (children in order), RANDOM (one child).
-- SIMPLE leaves play an event on the scene ANIMO with the same FILENAME
-  (e.g. ANIMO `KOGUT14_0` with `KOGUT14_0.ANN`).
-- SPEAKING leaves play WAVFN while the animo plays `PREFIX_START` (if
-  STARTING), then random `PREFIX_<n>` loops until the sound ends, then
-  `PREFIX_STOP` (if ENDING). These are the event names in the data
-  (e.g. KURATOR.ANN: `GADA_START, GADA_1..3, GADA_STOP`).
-- ONSTARTED / ONFINISHED fire with the PLAY parameter.
+- Tree semantics are **inferred** from the data:
+  - PARAMETER nodes: `SEQEVENT:NAME = n` selects child n.
+  - SEQUENCE nodes play their children in order; RANDOM nodes play one child.
+  - SIMPLE leaves play an event on the scene ANIMO with the same FILENAME.
+- SPEAKING leaves follow `CSpeakingAnimation` — **observed**:
+  - `play` (0x100d6ee0): with STARTING it plays `PREFIX_START` first, and the
+    WAV starts only when that finishes (`onPlayableFinished` 0x100d7290). With
+    no START event, the WAV starts at once.
+  - `playOnOf` (0x100d6300): while the WAV plays, it picks a random event named
+    `PREFIX_<x>` where x is not START, END or STOP. It makes up to 10,000
+    random tries. With an empty prefix it picks events whose name starts with
+    a digit. If the WAV is no longer playing, it calls `finish`.
+  - `finish` (0x100d7420): with ENDING it plays `PREFIX_END` (string at
+    0x1014ae3c), falling back to `PREFIX_STOP`, then signals finished.
+- ONSTARTED / ONFINISHED fire with the PLAY parameter (**inferred**).
 
 ## THIS inside RUN-called behaviours
 

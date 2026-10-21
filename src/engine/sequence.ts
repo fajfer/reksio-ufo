@@ -3,8 +3,14 @@
 // Tree semantics are inferred from the data: PARAMETER nodes pick a child by
 // the 1-based SEQEVENT number of the PLAY argument, SEQUENCE nodes play their
 // children in order, RANDOM nodes play one child. SIMPLE leaves play an event
-// on the scene ANIMO with the same FILENAME; SPEAKING leaves play a WAV while
-// the ANIMO runs PREFIX_START, random PREFIX_<n> loops, then PREFIX_STOP.
+// on the scene ANIMO with the same FILENAME.
+//
+// SPEAKING leaves follow CSpeakingAnimation (play 0x100d6ee0, playOnOf
+// 0x100d6300, onPlayableFinished 0x100d7290, finish 0x100d7420):
+//   - with STARTING, PREFIX_START plays first and the WAV starts when it ends;
+//   - while the WAV plays, random PREFIX_* events other than START/END/STOP
+//     loop (with an empty prefix: events whose name starts with a digit);
+//   - when the WAV ends, ENDING plays PREFIX_END, else PREFIX_STOP, if present.
 
 import { decodeText, parseSeq, type SeqNode } from '../formats/cnv.ts';
 import type { ObjectDef } from '../formats/cnv.ts';
@@ -24,8 +30,10 @@ type Running =
       leaf: Extract<Leaf, { kind: 'SPEAKING' }>;
       animo: Animo | null;
       voice: Voice | null;
+      /** Voice requested (after START) but its buffer may still be loading. */
+      voiceStarted: boolean;
       voiceDone: boolean;
-      phase: 'start' | 'talk' | 'stop';
+      phase: 'start' | 'talk' | 'end';
     };
 
 export class Sequence extends GameObject {
@@ -141,37 +149,70 @@ export class Sequence extends GameObject {
       return;
     }
     const animo = this.animoFor(leaf.animoFilename);
-    const run: Running = { leaf, animo, voice: null, voiceDone: false, phase: 'start' };
+    const run: Running = { leaf, animo, voice: null, voiceStarted: false, voiceDone: false, phase: 'start' };
     this.current = run;
-    const gen = this.generation;
-    const path = this.engine.resolver.resolve(leaf.wavFilename);
-    if (path) {
-      this.engine.audio
-        .load(path)
-        .then((buf) => {
-          if (gen !== this.generation || this.current !== run) return;
-          run.voice = new Voice(this.engine.audio, buf, this.engine.audio.sfxBus);
-          run.voice.onEnded = () => (run.voiceDone = true);
-          run.voice.play();
-        })
-        .catch(() => (run.voiceDone = true));
+    const startEv = this.prefixed(leaf.prefix, 'START');
+    if (leaf.starting && animo?.findEvent(startEv)?.frames.length) {
+      animo.play(startEv);
     } else {
-      this.engine.warnOnce(`SEQUENCE ${this.name}: missing ${leaf.wavFilename}`);
-      run.voiceDone = true;
+      this.startVoice(run);
+      this.talk(run);
     }
-    if (leaf.starting && animo?.findEvent(`${leaf.prefix}_START`)) animo.play(`${leaf.prefix}_START`);
-    else this.talk(run);
   }
 
-  private talkEvents(animo: Animo, prefix: string): string[] {
-    const re = new RegExp(`^${prefix}_\\d+$`);
-    return animo.ann?.events.filter((e) => re.test(e.name)).map((e) => e.name) ?? [];
+  private prefixed(prefix: string, suffix: string): string {
+    return prefix ? `${prefix}_${suffix}` : suffix;
   }
 
+  private startVoice(run: Extract<Running, { voice: unknown }>): void {
+    run.voiceStarted = true;
+    const gen = this.generation;
+    const path = this.engine.resolver.resolve(run.leaf.wavFilename);
+    if (!path) {
+      this.engine.warnOnce(`SEQUENCE ${this.name}: missing ${run.leaf.wavFilename}`);
+      run.voiceDone = true;
+      return;
+    }
+    this.engine.audio
+      .load(path)
+      .then((buf) => {
+        if (gen !== this.generation || this.current !== run) return;
+        run.voice = new Voice(this.engine.audio, buf, this.engine.audio.sfxBus);
+        run.voice.onEnded = () => (run.voiceDone = true);
+        run.voice.play();
+      })
+      .catch(() => (run.voiceDone = true));
+  }
+
+  /** playOnOf: a random talk event, excluding START/END/STOP. */
   private talk(run: Extract<Running, { voice: unknown }>): void {
     run.phase = 'talk';
-    const evs = run.animo ? this.talkEvents(run.animo, run.leaf.prefix) : [];
-    if (run.animo && evs.length) run.animo.play(evs[Math.floor(Math.random() * evs.length)]);
+    const animo = run.animo;
+    if (!animo?.ann) return;
+    const prefix = run.leaf.prefix;
+    const evs = animo.ann.events.filter((e) => {
+      if (!e.frames.length) return false;
+      if (!prefix) return /^\d/.test(e.name);
+      if (!e.name.startsWith(`${prefix}_`)) return false;
+      const suffix = e.name.slice(prefix.length + 1);
+      return suffix !== 'START' && suffix !== 'END' && suffix !== 'STOP';
+    });
+    if (evs.length) animo.play(evs[Math.floor(Math.random() * evs.length)].name);
+  }
+
+  /** finish: PREFIX_END, else PREFIX_STOP, when ENDING; then the leaf is done. */
+  private end(run: Extract<Running, { voice: unknown }>): void {
+    run.phase = 'end';
+    const animo = run.animo;
+    if (!run.leaf.ending || !animo) return;
+    for (const suffix of ['END', 'STOP']) {
+      const ev = this.prefixed(run.leaf.prefix, suffix);
+      if (animo.findEvent(ev)?.frames.length) {
+        animo.play(ev);
+        return;
+      }
+    }
+    if (animo.playing) animo.stop(false);
   }
 
   tick(): void {
@@ -183,14 +224,14 @@ export class Sequence extends GameObject {
       return;
     }
     if (cur.phase === 'start') {
-      if (!animoBusy) this.talk(cur);
-    } else if (cur.phase === 'talk') {
-      if (cur.voiceDone) {
-        cur.phase = 'stop';
-        if (cur.leaf.ending && cur.animo?.findEvent(`${cur.leaf.prefix}_STOP`)) cur.animo.play(`${cur.leaf.prefix}_STOP`);
-      } else if (!animoBusy) {
+      if (!animoBusy) {
+        this.startVoice(cur);
         this.talk(cur);
       }
+    } else if (cur.phase === 'talk') {
+      // The voice ending interrupts the current talk loop.
+      if (cur.voiceDone) this.end(cur);
+      else if (!animoBusy) this.talk(cur);
     } else if (!animoBusy) {
       this.next();
     }

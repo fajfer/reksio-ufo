@@ -97,3 +97,85 @@ MAT:ONNEXT=BMONNEXT  MAT:ONLATEST=BMONLATEST
 
 ## TODO
 - Method name table / dispatch in Matrix.dll; per-method semantics.
+
+## Model functions (Matrix.dll) [obs]
+
+Notation: `code[]` = model+0xc byte grid, `plan[]` = model+0x10 byte grid
+(per-tick movement plan), `cell[i].state` = dword at +8 of the 0x2c-byte cell
+record (setter 0x10004100, getter 0x10004110). Index `i = y*W + x`.
+
+### Model vtable 0x1000d5b0
+| slot | addr | meaning |
+|---|---|---|
+| +0x00 | 0x100024e0 | LOAD(path) |
+| +0x04 | 0x10002810 | TICK |
+| +0x08 | 0x100029e0 | NEXT |
+| +0x0c | 0x10002c40 | moveOff(from, to, state) |
+| +0x10 | 0x10002c10 | moveXY((fx,fy),(tx,ty),state) -> moveOff(fy*W+fx, ty*W+tx, state) |
+| +0x14 | 0x10002cc0 | setOff(i, v): `code[i] = (byte)v` |
+| +0x18 | 0x10002ca0 | setXY(x, y, v): `code[y*W+x] = (byte)v` |
+| +0x1c | 0x10002ce0 | getXY(x, y) -> code[y*W+x] |
+| +0x20 | 0x10002d00 | getOff(i) -> code[i] |
+| +0x78 | 0x10003a50 | CLEAR |
+
+### moveOff (0x10002c40)
+```
+if code[to] != 8:            # 8 absorbs: the source just vanishes
+    code[to] = code[from]
+    if code[to] == 2: cell[to].state = state
+code[from] = 0; cell[from].state = 0
+```
+Script MOVE(a,b) -> moveOff(a,b,0); MOVE(x0,y0,x1,y1) -> moveXY(...,0)
+(runner 0x10006ba0).
+
+### TICK (0x10002810) — plans boulder (code 2) movement
+```
+iterX = 0; iterY = H-2; plan.fill(0)
+for x in 0..W-1:
+  y = H-2
+  while y >= 0:
+    i = y*W+x
+    if code[i] == 2:
+      b = code[i+W]                    # cell below
+      if b == 0 or b == 5:
+        plan[i] = (b == 5) ? 4 : 1     # fall (4 = fall onto a 5)
+        # skip the run of boulders stacked directly above (they stay plan 0)
+        if code[i-W] == 2: y--, then while y>=0 and code[(y-1)*W+x]==2... (see asm 0x10002980)
+      elif b == 2:                     # boulder on boulder: try to roll
+        if y != 0 and code[i-W] == 2: cell[i].state = 0          # loaded from above: no roll
+        elif (x==0 or plan[i-1]==0) and (x<=1 or plan[i-2]==0)
+             and code[i-1]==0 and code[i+W-1]==0:
+             cell[i].state = 2; plan[i] = 2                       # roll left
+        elif (x==W-1 or plan[i+1]==0) and (x>=W-2 or plan[i+2]==0)
+             and code[i+1]==0 and code[i+W+1]==0:
+             cell[i].state = 3; plan[i] = 3                       # roll right
+        else: cell[i].state = 0
+      else: cell[i].state = 0
+    y--
+```
+(no bounds clamp on x-1 at x==0: reads the previous row's last cell — flat indexing.)
+
+### NEXT (0x100029e0) — executes one planned move per call
+```
+res = 0
+for y = iterY downto 0:
+  for x = (y==iterY ? iterX : 0) .. W-1:
+    m = plan[y*W+x]; if m == 0: continue
+    switch m (jump table 0x10002bf4):
+      1: moveXY((x,y),(x,y+1),1); if code[(y+2)*W+x] == 0x63: res = 2
+      2: moveXY((x,y),(x-1,y+1),2)
+      3: moveXY((x,y),(x+1,y+1),3)
+      4: if cell[y*W+x].state != 1: continue   # not executed
+         cell[y*W+x].state = 0                 # (no move)
+    (nx,ny) = nextPos(x,y)          # 0x100022b0: x+1, or (0,y-1) at row end
+    if hasPlanFrom(nx,ny):          # 0x10001f30: any plan!=0 scanning on from (nx,ny)
+        iterX,iterY = nx,ny
+        fire ONNEXT(x, y, m); return res or 1
+    else:
+        iterX = W; iterY = -1
+        fire ONLATEST(x, y, m); return res
+return 0
+```
+Events are fired by 0x10001f90: it looks up the behaviour named by the
+ONNEXT/ONLATEST property (owner vt+0x74 = getBehaviour) and runs it with three
+string params `[x, y, m]` (CXArray built with `CXString = int`) **[obs]**.
