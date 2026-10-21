@@ -41,6 +41,11 @@ export class AudioSystem {
   evict(path: string): void {
     this.cache.delete(path.toLowerCase());
   }
+
+  /** Drop decoded buffers (decoded PCM is large); called on scene change. */
+  clearCache(): void {
+    this.cache.clear();
+  }
 }
 
 /** decodeAudioData resamples to the context rate; keep each file's own rate. */

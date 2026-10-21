@@ -502,6 +502,7 @@ export class Engine implements ScriptHost {
     if (this.scene) {
       for (const o of this.scene.list) o.dispose();
       this.renderer.clear();
+      this.audio.clearCache();
     }
     this.hover = this.pressed = null;
     this.minHotspotPriority = -Infinity;
