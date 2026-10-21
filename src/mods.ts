@@ -7,6 +7,7 @@ import type { ObjectDef } from './formats/cnv.ts';
 export function applySceneTweaks(scene: string, defs: ObjectDef[]): void {
   if (scene === 'S16_SPACEINVADERS') {
     invaderRapidFire(defs);
+    invaderMultiBeetroot(defs);
     invaderTapFire(defs);
     invaderSkipButton(defs);
   }
@@ -18,8 +19,8 @@ export function applySceneTweaks(scene: string, defs: ObjectDef[]): void {
  * (PLAY0 is 21 frames at 16 fps, ~1.3 s). A missed beetroot therefore locks
  * the throw for over a second. Replace the gate with a 0.2 s cooldown:
  * VARFIREOK starts at 1; BEHREKSIOFIRE clears it and arms TIMERFIRE, whose
- * one-shot tick sets it back after 200 ms. Re-throwing restarts the beetroot
- * animation, exactly like the script's own PLAY("PLAY0") does.
+ * one-shot tick sets it back after 200 ms. The clone pool below then gives
+ * every throw its own beetroot.
  */
 function invaderRapidFire(defs: ObjectDef[]): void {
   const byName = (name: string): ObjectDef | undefined => defs.find((d) => d.name.toUpperCase() === name);
@@ -47,6 +48,96 @@ function invaderRapidFire(defs: ObjectDef[]): void {
         ['ELAPSE', '200'],
         ['TICKS', '1'],
         ['ONTICK', '{VARFIREOK^SET(1);}'],
+      ]),
+    },
+  );
+}
+
+/** Beetroots that can be in flight at once (clones of ANIMOBURAK). */
+const BEETROOT_SLOTS = 8;
+
+/**
+ * Alien Invaders: every throw reused the single ANIMOBURAK object, so a new
+ * throw repositioned (restarted) the beetroot instead of adding one. Create a
+ * pool of clones at scene init; each throw takes the first free slot, records
+ * it in VARTHROWBURAK, and Reksio's THROW0 plays PLAY0 on that clone.
+ * BEHBURAKMOVE now probes the clone that raised the frame event (THIS) and
+ * remembers it in VARBURAKHIT, so a hit explodes exactly that beetroot.
+ */
+function invaderMultiBeetroot(defs: ObjectDef[]): void {
+  const byName = (name: string): ObjectDef | undefined => defs.find((d) => d.name.toUpperCase() === name);
+
+  const patchCode = (name: string, find: string, replace: string): void => {
+    const o = byName(name);
+    const code = o?.props.get('CODE');
+    if (o && code?.includes(find)) o.props.set('CODE', code.replaceAll(find, replace));
+  };
+
+  // Pool of beetroots, created at scene init (BEHINIT is Reksio's ONINIT).
+  const init = byName('BEHINIT');
+  const initCode = init?.props.get('CODE');
+  if (init && initCode?.endsWith('}')) {
+    init.props.set('CODE', `${initCode.slice(0, -1)}ANIMOBURAK^CLONE(${BEETROOT_SLOTS});}`);
+  }
+
+  // The throw: take the first free slot, then position it.
+  patchCode(
+    'BEHREKSIOFIRE',
+    'ANIMOBURAK^SETPOSITION([ANIMOREKSIO^GETCENTERX()+40],0);',
+    `VARFOUND^SET(0);BEHFINDSLOT^RUNLOOPED(1,${BEETROOT_SLOTS});CONDNOFREE^BREAK(TRUE);` +
+      'S16_SPACEINVADERS^RUN(VARTHROWBURAK,"SETPOSITION",[ANIMOREKSIO^GETCENTERX()+40],0);',
+  );
+
+  // Reksio's throw animation plays the beetroot chosen above.
+  byName('ANIMOREKSIO')?.props.set('ONSTARTED^THROW0', '{S16_SPACEINVADERS^RUN(VARTHROWBURAK,"PLAY","PLAY0");}');
+
+  // Collision: probe the clone that raised the frame event, and remember it.
+  patchCode('BEHBURAKMOVE', 'ANIMOBURAK^GETPOSITIONX(),ANIMOBURAK^GETPOSITIONY()', 'THIS^GETPOSITIONX(),THIS^GETPOSITIONY()');
+  const move = byName('BEHBURAKMOVE');
+  const moveCode = move?.props.get('CODE');
+  if (move && moveCode?.startsWith('{')) {
+    move.props.set('CODE', `{VARBURAKHIT^SET(THIS^GETNAME());${moveCode.slice(1)}`);
+  }
+
+  // Hits explode the beetroot that actually hit (VARBURAKHIT).
+  const explode =
+    'VARX^SET(S16_SPACEINVADERS^RUN(VARBURAKHIT,"GETCENTERX"));' +
+    'VARY^SET(S16_SPACEINVADERS^RUN(VARBURAKHIT,"GETCENTERY"));' +
+    'S16_SPACEINVADERS^RUN(VARBURAKHIT,"SETPOSITION",VARX,VARY);' +
+    'S16_SPACEINVADERS^RUN(VARBURAKHIT,"PLAY","PEKA");';
+  const wasExploded = 'ANIMOBURAK^SETPOSITION(ANIMOBURAK^GETCENTERX(),ANIMOBURAK^GETCENTERY());ANIMOBURAK^PLAY("PEKA");';
+  patchCode('BEHUFOHIT', wasExploded, explode);
+  patchCode('BEHBURAKDESKAHIT', wasExploded, explode);
+
+  defs.push(
+    { name: 'VARSLOT', props: new Map([['TYPE', 'INTEGER']]) },
+    { name: 'VARFOUND', props: new Map([['TYPE', 'INTEGER'], ['VALUE', '0']]) },
+    { name: 'VARTHROWBURAK', props: new Map([['TYPE', 'STRING']]) },
+    { name: 'VARBURAKHIT', props: new Map([['TYPE', 'STRING']]) },
+    {
+      name: 'BEHFINDSLOT',
+      props: new Map([
+        ['TYPE', 'BEHAVIOUR'],
+        ['CODE', '{VARSLOT^SET($1);CONDFREESLOT^BREAK(TRUE);}'],
+      ]),
+    },
+    {
+      name: 'CONDFREESLOT',
+      props: new Map([
+        ['TYPE', 'CONDITION'],
+        ['OPERAND1', 'S16_SPACEINVADERS^RUN(["ANIMOBURAK_"+VARSLOT],"ISPLAYING")'],
+        ['OPERATOR', 'EQUAL'],
+        ['OPERAND2', 'FALSE'],
+        ['ONRUNTIMESUCCESS', '{VARFOUND^SET(1);VARTHROWBURAK^SET(["ANIMOBURAK_"+VARSLOT]);}'],
+      ]),
+    },
+    {
+      name: 'CONDNOFREE',
+      props: new Map([
+        ['TYPE', 'CONDITION'],
+        ['OPERAND1', 'VARFOUND'],
+        ['OPERATOR', 'EQUAL'],
+        ['OPERAND2', '0'],
       ]),
     },
   );
@@ -169,6 +260,7 @@ function invaderSkipButton(defs: ObjectDef[]): void {
           '{TIMER1^DISABLE();TIMERHINT^DISABLE();BUTTONSKIP^DISABLE();TEXTSKIP^HIDE();' +
             'S16_SPACEINVADERS^RUNCLONES("ANIMOUFO",-1,-1,"BEHSKIPSTOP");' +
             'S16_SPACEINVADERS^RUNCLONES("ANIMOUFOFIRE",-1,-1,"BEHSKIPSTOP");' +
+            'S16_SPACEINVADERS^RUNCLONES("ANIMOBURAK",-1,-1,"BEHSKIPSTOP");' +
             'ANIMOBURAK^STOP(FALSE);ANIMOBURAK^HIDE();ANIMOREKSIO^PLAY("SUCCESS");}',
         ],
       ]),
