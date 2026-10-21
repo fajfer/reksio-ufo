@@ -22,3 +22,11 @@ Status: in progress. "observed" = seen in DLL/scripts/data; "inferred" = guess.
 
 ## REA status
 - Hopper session became unreachable (search_procedures timed out). Switched to llvm-objdump on PIKLIB8.dll exports.
+
+## DLL: STATICFILTER (observed)
+- `sub_100a4490` = STATICFILTER object ctor (CMC_Object type id 0x7df). Reads property `ACTION` and builds a filter by name:
+  COLORCHANNEL, GRAYSCALE, BLUR, ROTATE, SCALE, NEGATIVE, RANDOMJITTER, WAVES. Wrapper object (0x14 bytes) + inner filter.
+  ROTATE: wrapper vtable 0x1014cd08 (secondary 0x1014ccf8), inner filter 0x18 bytes, vtable 0x1014ccf0, created via `sub_100a4f60(0x66)`, with byte fields +0xc=0, +0xd=1 (inferred: +0xc/+0xd are CURRENTFRAME/CANUNDO-like flags; TODO confirm).
+- `sub_100a4b40` = serialize/deserialize (same ACTION switch).
+- `sub_100a67b0` = SCALE filter SETPROPERTY: FACTORX/FACTORY (double), BYCENTER (bool), else falls to base `sub_100a4fa0`.
+- Filter property strings: CURRENTFRAME, CANUNDO, SIZE, RGB, CHANNELS, MAXJITTER, ANGLE, BYCENTER, FACTORY, FACTORX, OFFSET (0x1014cecc..0x1014cfb8).

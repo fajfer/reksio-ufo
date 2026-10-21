@@ -141,7 +141,9 @@ export class ImageObj extends Graphic {
 }
 
 /**
- * ANIMO playback. In this game every ANN event has loopCount 0 and no flags,
+ * ANIMO playback. CAnimo::Play (0x10008da0) shows the animo, defaults FPS to
+ * 15 and fires ONSTARTED; stop(b) (0x1000bf10) fires ONFINISHED when b.
+ * In this game every ANN event has loopCount 0 and no flags,
  * so an event plays frames 0..n-1 once at FPS and then fires ONFINISHED
  * (CAnimo::Next 0x10007fb0); looping is done by scripts re-playing events.
  */
@@ -163,7 +165,8 @@ export class Animo extends Graphic {
     super(engine, def);
     this.fps = this.numProp('FPS', 16);
 
-    this.method('PLAY', (a) => this.play(str(a[0])));
+    // PLAY() replays the current event from frame 0 (CAnimo::play 0x1000bef0).
+    this.method('PLAY', (a) => this.play(a.length ? str(a[0]) : (this.event?.name ?? '')));
     this.method('STOP', (a) => this.stop(a.length ? argValue(a[0]).toBool() : true));
     this.method('PAUSE', () => {
       this.paused = true;
@@ -238,14 +241,11 @@ export class Animo extends Graphic {
     this.fps = src.fps;
   }
 
+  /** CAnimo::resolveEventName (0x1000bdf0): case-insensitive name match only. */
   findEvent(name: string): AnnEvent | null {
     if (!this.ann) return null;
     const n = name.toUpperCase();
-    const byName = this.ann.events.find((e) => e.name === n);
-    if (byName) return byName;
-    // TODO(unverified): CAnimo::resolveEventName fallback to an index.
-    const idx = Number(n);
-    return Number.isInteger(idx) ? (this.ann.events[idx] ?? null) : null;
+    return this.ann.events.find((e) => e.name === n) ?? null;
   }
 
   /** PLAY requested before the ANN finished loading (CNVLOADER objects). */
@@ -262,6 +262,8 @@ export class Animo extends Graphic {
       this.engine.warn(`ANIMO ${this.name}: no event ${name}`);
       return;
     }
+    // CAnimo::Play (0x10008da0) ignores events without frames.
+    if (!ev.frames.length) return;
     this.event = ev;
     this.frame = 0;
     this.acc = 0;

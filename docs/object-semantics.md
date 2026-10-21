@@ -73,10 +73,18 @@ PRIORITY. `createButton` (0x10055e00) then does the following — **observed**:
   animo-level flags are set. So an event plays frames 0..n−1 once and then
   fires ONFINISHED; looping is done by scripts
   (`ONFINISHED^1={THIS^PLAY("2")}`).
-- **Inferred** from usage:
-  - `STOP()` fires ONFINISHED; `STOP(FALSE)` (158 uses) does not.
-  - `PLAY` makes the animo visible.
-  - Event names are matched case-insensitively.
+- **Observed** method semantics:
+  - `PLAY("EV")` → `CAnimo::Play(String)` (0x10008480) resolves the name with
+    `resolveEventName` (0x1000bdf0): case-insensitive, no numeric fallback,
+    and an unknown name is a no-op.
+  - `CAnimo::Play(event, frame)` (0x10008da0) ignores events with 0 frames,
+    makes the animo visible (vtable +0x7c(1)), defaults FPS to 15 if 0, and
+    signals ONSTARTED.
+  - `PLAY()` with no argument replays the current event from frame 0
+    (`CAnimo::play` 0x1000bef0).
+  - `STOP([b=TRUE])` (`CMC_Animo_Runner::stop` 0x10039ad0 → `CAnimo::stop`
+    0x1000bf10) stops, and fires ONFINISHED only when `b` is true.
+    `STOP(FALSE)` is used 158 times in the scripts.
 
 ## SEQUENCE (inferred from data)
 
