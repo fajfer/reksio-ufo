@@ -22,10 +22,27 @@ game. Useful query parameters:
 - `?trace=1` — log every fired event handler to the console
 
 `npm run build` produces a static site in `dist/`. Deployed without `/game/`,
-it shows the folder picker.
+it shows the folder picker; served with the install at `/game/` it can also offer the offline download described below.
+`npm run preview` serves the build together with the install, handy for
+testing that flow locally.
 
 Progress is saved in `localStorage`. On the first run, the install's `Ufo.ini`
 is imported, so saves from the original game carry over.
+
+## Offline & installing
+
+A service worker (`public/sw.js`) plus a web app manifest
+(`public/manifest.webmanifest`, icons in `public/icons/`) make the site:
+
+- **installable** — "Zainstaluj aplikację" on desktop Chrome/Edge, Share →
+  "Add to Home Screen" on mobile (an iOS hint is shown in the boot panel);
+- **playable offline** — with the install served at `/game/`, the boot panel
+  offers *Pobierz grę i graj offline*: every game file (plus the app shell)
+  is copied into Cache Storage, after which the site boots and plays with no
+  network at all. The button turns into *Usuń pobraną grę* once it is done.
+
+Offline support is production-only: the dev server stays untouched (no
+service worker, no stale caches).
 
 ## Layout
 
@@ -34,6 +51,8 @@ is imported, so saves from the original game carry over.
 | `src/formats/` | Decoders: CNV cipher and definitions, SEQ, PIK images, NVP animations, LZO1X, RLE, legacy LZW |
 | `src/script/` | String-based script interpreter ported from the engine's own algorithms |
 | `src/engine/` | Runtime: containers, signals, variables, behaviours, ANIMO/IMAGE/SOUND/BUTTON/SEQUENCE, input, main loop |
+| `src/offline.ts` | "Download the game" for offline play (Cache Storage; used with `public/sw.js`) |
+| `public/` | Web app manifest, service worker and icons (the icon set is scaled from `ReksioUfo.exe`'s own icon by `tools/make-icons.ts`) |
 | `docs/` | Semantics recovered from PIKLIB8.dll with REA, with procedure addresses and observed/inferred markers |
 | `tools/annformat.md` | ANN byte layout |
 | `tools/drive.ts` | Headless Chrome driver (click/key/screenshot) for testing |

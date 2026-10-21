@@ -41,6 +41,11 @@ export class HttpFS implements GameFS {
     return this.index.has(normalizePath(path));
   }
 
+  /** Install-relative paths of every file (used by the offline download). */
+  paths(): string[] {
+    return [...this.index.values()];
+  }
+
   list(dir: string): string[] {
     const prefix = normalizePath(dir).replace(/\/$/, '') + '/';
     return [...this.index.keys()].filter((k) => k.startsWith(prefix) && !k.slice(prefix.length).includes('/'));

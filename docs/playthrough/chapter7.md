@@ -59,25 +59,34 @@ waitscene:S71_DROGA,30000
 
 Goal: walk Reksio (starts at 736,288) left until x < 32 (CONDSUCCESS →
 S72_0_BRAMA). Contact with a chicken (ISNEAR) sends you to S76 (caught).
-Controls: arrow keys, 4 px per animation frame.
+Controls: arrow keys, 4 px per animation frame (20 fps).
+
+The 13 chickens each loop a 48/49-frame circle (CW/CCW, ~143x138 px swept
+box); with the (now DLL-verified) ISNEAR overlap test the field is too
+dense for a blind `hold:`. A straight `hold:ArrowLeft` gets caught within
+a second. I drove it with an in-page *input-only* autopilot
+(`docs/playthrough/chapter7-s71-autopilot.js`): it predicts every chicken's
+box from its current ANN frame/accumulator, runs a time-expanded BFS over
+Reksio positions (4 px grid, 50 ms steps, wall map from IMGALPHA alpha 38,
+6 px safety margin), and presses arrow keys via synthetic keydown/keyup.
+It does not touch game state. Replans every 400 ms.
 
 ```
 wait:5000
-hold:ArrowLeft,3000
-waitscene:S72_0_BRAMA,10000
+eval:window.__pmargin=6;1
+eval:<contents of docs/playthrough/chapter7-s71-autopilot.js>
+waitscene:S72_0_BRAMA,60000
 ```
 
-Notes: **bug** — ANIMO ISPLAYING("LEFT") ignored its argument, so the
-`@IF(VARBTEMP1 == FALSE)` guard never let Reksio start walking. Until
-fixed, patch it first:
+Works at speed=4 too, but I ran it at speed=1
+(`goto:scene=S71_DROGA&speed=1`) for timer resolution. If caught, S76
+plays and returns to S71; just re-run the autopilot eval.
 
-```
-eval:(()=>{const a=engine.find("ANNREKSIO"); const orig=a.methods.get("ISPLAYING"); const V=orig([]).constructor; a.methods.set("ISPLAYING",(args)=>{ if(!args.length) return orig(args); const s=args[0].toStr(); const ev=a.call("GETEVENTNAME",[],{self:null,params:[]}).v; return V.bool(orig([]).v && ev.toUpperCase()===s.toUpperCase());}); return "patched"})()
-```
-
-A straight walk left at y=288 was not caught even though Reksio visibly
-overlapped a chicken — ISNEAR(…,1) is implemented as centre distance <= 1
-(reported as suspicious).
+Notes: bugs found here and fixed by the coordinator: ANIMO ISPLAYING("LEFT")
+ignored its argument (Reksio could never start walking), and ISNEAR used
+centre distance (chickens could never catch you). Re-verified after the
+rebuild with no monkey-patches: collisions send you to S76, the autopilot
+reaches S72.
 
 ## S72_0_BRAMA (gate, VAR_BRAMA=1)
 
@@ -86,7 +95,7 @@ KALKULATOR animo as a button.
 
 ```
 wait:8000
-click:335,440          # KALKULATOR (clickname's probe point 326,433 did not register)
+clickname:KALKULATOR
 waitscene:S73_0_KOD,10000
 ```
 
@@ -110,3 +119,45 @@ waitscene:S75_PORT,30000
 Notes: the keypad buttons use `RECT=<image name>`; the build I started on
 did not support that (no hotspots); the coordinator's fix was already in the
 rebuilt bundle after a `goto:scene=S73_0_KOD&speed=4`.
+
+## S75_PORT (sneak past the two chicken guards)
+
+Goal: make both parrots say their "X1" line, which sends both guard
+chickens (Teresa and Krysia) over to the parrots (KURALEWA/KURAPRAWA
+PAPUGASTART → PAPUGAGO, V_PP++ each). Then click the arrow: Reksio stands
+up and runs (WSTAJE+BIEG1, 40 frames); at the end C_END1 needs V_PP=2,
+else you are caught (S76). Each parrot click plays line X<VAR_GADAx> and
+increments it (5 wraps to 1); VAR_GADAL/P start random 1..4, so click a
+parrot (waiting for its button to come back) until its counter is 1.
+
+```
+wait:6000
+eval:JSON.stringify([engine.find("VAR_GADAL").value.v, engine.find("VAR_GADAP").value.v])
+# click BUT_PL / BUT_PP (one at a time, waiting until .enabled again) until both are 1
+clickname:BUT_PL
+clickname:BUT_PP
+wait:6000                       # V_PP becomes 2 ~5 s after the clicks (speed 4) and stays 2 for ~6 s
+clickname:BUT_STRZ
+waitscene:S74_LOTNAJAJO_1,30000
+```
+
+Notes: no bugs. The run that worked: VAR_GADAL=1, VAR_GADAP=2 on entry →
+3 extra clicks on BUT_PP; a trial X1+X1 showed the V_PP=2 window at
+5.1 s–11.1 s.
+
+## S74_LOTNAJAJO_1 / _2 / _3 (cutscenes: flight to the egg)
+
+Goal: none; three teapot-ship cutscenes chain automatically. At the end
+of _3 `DODOK` sets VARROZDZIAL8=1 and goes to S82_DOK — **end of chapter 7**.
+
+```
+waitscene:S82_DOK,60000
+eval:engine.find("VARROZDZIAL8").value.v     # 1
+```
+
+## Summary
+
+Chapter 7 completes in the port. Only forced/assisted part: S71_DROGA was
+driven by the input-only autopilot (synthetic arrow keys), not by state
+changes. Bugs found and fixed during the run: SEQEVENT letter indices,
+ANIMO ISPLAYING(event), ISNEAR semantics, BUTTON RECT=<object>.

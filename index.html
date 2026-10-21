@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Reksio i UFO</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#0b0d12" />
+    <link rel="icon" href="./icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Reksio i UFO" />
     <style>
       :root {
         --bg: #0b0d12;
@@ -75,6 +84,27 @@
         font-size: 14px;
         min-height: 1.5em;
       }
+      #choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+      }
+      #boot progress {
+        display: block;
+        width: min(46ch, 80vw);
+        margin: 16px auto 0;
+        accent-color: var(--accent);
+      }
+      #ios-hint {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      /* Overrides display:inline-block above, so `hidden` really hides. */
+      #boot [hidden] {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -85,9 +115,16 @@
         <p>
           Wskaż folder z zainstalowaną grą (ten, w którym jest <code>DANE</code> i <code>Wavs</code>).
           Pliki są czytane lokalnie w przeglądarce i nigdzie nie są wysyłane.
+          Możesz też pobrać grę i zainstalować ją jako aplikację — zadziała wtedy bez internetu.
         </p>
-        <label id="pick">Wybierz folder gry<input id="picker" type="file" webkitdirectory multiple /></label>
-        <button id="play" hidden>Graj</button>
+        <div id="choices">
+          <label id="pick">Wybierz folder gry<input id="picker" type="file" webkitdirectory multiple /></label>
+          <button id="play" hidden>Graj</button>
+          <button id="offline" hidden>Pobierz grę i graj offline</button>
+          <button id="install" hidden>Zainstaluj aplikację</button>
+        </div>
+        <progress id="dl" hidden max="100" value="0"></progress>
+        <div id="ios-hint" hidden>Na iPhonie/iPadzie: Udostępnij → „Dodaj do ekranu początkowego”.</div>
         <div id="status"></div>
       </div>
     </div>
