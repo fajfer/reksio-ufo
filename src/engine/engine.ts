@@ -24,7 +24,10 @@ import { GameObject } from './object.ts';
 import { Project } from './project.ts';
 import { Renderer, SCREEN_H, SCREEN_W, makeSprite } from './renderer.ts';
 import { Sequence } from './sequence.ts';
-import { Button, CanvasObserver, Font, Keyboard, Mouse, TextObj } from './ui.ts';
+import { Filter, StaticFilter } from './filters.ts';
+import { Matrix } from './matrix.ts';
+import { Font } from './fonts.ts';
+import { Button, CanvasObserver, Keyboard, Mouse, TextObj } from './ui.ts';
 import { ArrayVar, BoolVar, DoubleVar, IntegerVar, StringVar } from './variables.ts';
 
 type Ctor = new (engine: Engine, def: ObjectDef) => GameObject;
@@ -55,6 +58,9 @@ const FACTORY: Record<string, Ctor> = {
   CANVASOBSERVER: CanvasObserver,
   TEXT: TextObj,
   FONT: Font,
+  STATICFILTER: StaticFilter,
+  FILTER: Filter,
+  MATRIX: Matrix,
 };
 
 class Container {

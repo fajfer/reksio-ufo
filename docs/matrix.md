@@ -1,6 +1,6 @@
 # MATRIX object (Piklib 8) — reverse-engineering notes
 
-Status: IN PROGRESS. Sources: `Matrix.dll` and PIKLIB8.dll from the install,
+Status: analysed; implemented in `src/engine/matrix.ts` (tests: `test/matrix.test.ts`). Sources: `Matrix.dll` and PIKLIB8.dll from the install,
 scene scripts `scripts/ReksioUfo/PRZYGODA/s44_511_Podkop/*.cnv` (the only
 user of MATRIX).
 
@@ -20,8 +20,9 @@ Legend: **[obs]** observed in disassembly at cited address;
   **[obs]** (export table). So MATRIX is an extern-object plug-in.
 - Strings in Matrix.dll include the prop names MATRIX, TYPE, ONLATEST, ONNEXT,
   CELLHEIGHT, CELLWIDTH, BASEPOS, SIZE and the method names (see below) **[obs]**.
-- Analysis of Matrix.dll is done with `objdump -d` (Hopper session is bound to
-  PIKLIB8.dll and must not be switched).
+- Analysis of Matrix.dll was done with `objdump -d -M intel` plus an annotator
+  mapping IAT slots / exports / string addresses (the shared Hopper session is
+  bound to PIKLIB8.dll). Matrix.dll VAs equal file offsets + 0x10000000.
 
 ## How PIKLIB8 loads it
 
@@ -211,3 +212,50 @@ CALCENEMYMOVEDIR(i, d) 0x10003c50 (handler 0x100081e0) returns the first of
 - `(d+2)%4` via 0x10003c00 (0->2, 1->3, 3->1, 2->0),
 for which canGoDir holds, else 4. (A wall follower.) Note the turn helpers map
 any value other than 0,1,3 like 2.
+- CALCENEMYMOVEDEST(i, d): handler 0x10008340 -> step(i, d) (0x10003d30).
+
+### Gate rectangle bounds [obs]
+ISINGATE uses PIKLIB8 `CXRect::IsInRect(int,int)` (0x100cc740 -> 0x100cc710):
+`left <= x < right && top <= y < bottom` (right/bottom EXCLUSIVE), whereas
+ISGATEEMPTY (0x10002d10) loops `x = left..right`, `y = top..bottom` INCLUSIVE.
+The model's rect starts as all zeros (ctor 0x100022e0), so before SETGATE
+ISINGATE is always false and ISGATEEMPTY only tests cell (0,0).
+
+## Cell codes (from the S44 scripts, IC_FIELD_CODE_*) [inf names]
+0 EMPTY, 1 GROUND, 2 STONE (the only code the physics moves), 3 DYNAMITE,
+4 WALL_WEAK, 5 ENEMY, 6 WALL_STRONG, 7 DYNAMITE_FIRED, 8 EXPLOSION, 9 EXIT,
+99 (0x63) MOLE (the hero).
+
+Consequences of the observed code:
+- A stone falls (plan 1) into EMPTY; onto an ENEMY it gets plan 4, which NEXT
+  only reports (ONNEXT/ONLATEST with code 4, script BSMOVEENEXP explodes the
+  enemy) when the stone was already falling — `cell.state == 1`, which
+  moveOff sets on the destination of a plan-1 move (state = the move kind).
+- A stone that lands directly above the MOLE (code[(y+2)*W+x] == 99 after a
+  plan-1 move) makes NEXT return 2 (hero hit) **[obs]**; resting stones never
+  fall onto the mole (99 below = "other" in TICK).
+- Moving anything into an EXPLOSION (8) cell destroys the mover (moveOff).
+
+## Script protocol (S44_511_PODKOP) [obs in scripts]
+`BSTICK: MAT^TICK(); ITICK2^SET(MAT^NEXT()); ...` and
+`ITICK2:ONBRUTALCHANGED^1={ITICK2^SET(MAT^NEXT());}` — so the script drains
+the plan, one move per NEXT, re-entering NEXT from the variable's handler.
+ONNEXT=BMONNEXT / ONLATEST=BMONLATEST store `$1,$2,$3` into ISSRCX, ISSRCY,
+ISCODE; ISCODE:ONBRUTALCHANGED^1..4 run the sprite moves (down, down-left,
+down-right, enemy explosion). The handler runs synchronously inside NEXT,
+after the grid change, so MAT^GET of the target already sees the stone.
+
+## Not implemented (unused by the game)
+LOAD (model slot 0, 0x100024e0), GETCELLGFX/SETCELLGFX, GETCELL*LINK /
+SETCELL*LINK, GETCELLWITHGFX (handlers 0x10007370, 0x100075a0, 0x10007b30,
+0x100078b0, 0x10007820 — not analysed).
+
+## Port notes
+- `MatrixModel` holds the pure logic; `Matrix` (GameObject) maps script calls
+  onto it with the same argc-based overload choice as the runner handlers.
+- Out-of-range grid reads (which the C code makes into neighbouring heap
+  memory, e.g. the row above row 0) return 0xff in the port, i.e. "not empty,
+  not a stone". The S44 levels are framed by WALL_STRONG so this never matters.
+- Events go through `GameObject.signal(event, undefined, [x, y, move])`; the
+  original runs the ONNEXT/ONLATEST behaviour directly (no `^PARAM` variant).
+- No per-frame hook: TICK is a script method (driven by the scene's TIMER).

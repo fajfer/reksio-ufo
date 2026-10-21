@@ -8,10 +8,23 @@ Status: in progress. "observed" = seen in DLL/scripts/data; "inferred" = guess.
 - FONT objects: FARIAL, FNTARIAL (x2), property `DEF_ARIAL_STANDARD_14=ARIAL14.FNT`.
 - No *.fnt file found under game/ by name search yet. TODO: locate ARIAL14.FNT (maybe case/extension differs or packed).
 
-## TODO
-- Rotation semantics (pivot, units, direction, CURRENTFRAME, CANUNDO).
-- Fade semantics.
-- Font file format and draw routine.
+## Summary
+- ROTATE: ANGLE in degrees, positive = clockwise on screen; pivot = integer center (w/2, h/2) of each frame's own bitmap; output frame grows to the rotated bounding box, center kept; nearest-neighbour. CURRENTFRAME=TRUE: every new frame of a linked ANIMO is rotated when shown (not only the frame at LINK time). CANUNDO=TRUE: originals are backed up and restored on frame change / UNLINK, so rotations never accumulate.
+- FADEIN/FADEOUT: opacity ramps START->END by SPEED (default 0.1) per step. Unused by this game's scripts.
+- FNT: 20-byte header + char table + NxN kerning + left/right trims + RGB565 atlas + alpha; advance = trimmed width - kerning + 2. ARIAL14.FNT is not shipped.
+
+## Port (src/engine/filters.ts, src/engine/fonts.ts)
+- `StaticFilter` sets `target.filterTransform = { angle, pivotX: null, pivotY: null }` on LINK and clears it on UNLINK (pivot null = frame center). ANGLE changes update linked transforms live (equivalent for the game's UNLINK/SET/LINK pattern).
+- `rotateRGBA` is a pixel-exact port of sub_1002e410; `rotatedRect` gives the enlarged frame rect; `drawTransformed` is the canvas approximation.
+- `Filter` steps fades once per `stepMs` (1000/60, inferred) on `tick(dt)`.
+- `decodeFnt` / `BitmapFont` / `Font` implement the format, metrics, drawing and justification; `Font` falls back to a canvas font when the file is missing.
+
+## Open questions
+- Exact tick rate of FILTER steps (inferred per engine frame).
+- Mapping of TEXT HJUSTIFY/VJUSTIFY strings to the _justify enum (inferred: LEFT/RIGHT/CENTER, VJUSTIFY=TRUE -> centered).
+- Whether CURRENTFRAME=FALSE filters all frames up front (not used by the game).
+- FADEINOUT switching behaviour (not used).
+- Glyph colour: FNT glyphs are coloured bitmaps; CSimpleFont6::setColor exists (0x100d3f20) but its effect was not traced.
 
 ## Script evidence (observed)
 - All STATICFILTERs use `ACTION=ROTATE`. FFADEIN (s65_Zamek) has `ACTION=FADEOUT` and is never called from any script.

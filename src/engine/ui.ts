@@ -4,6 +4,7 @@ import type { ObjectDef } from '../formats/cnv.ts';
 import { argValue, type Arg } from '../script/interpreter.ts';
 import { Value } from '../script/values.ts';
 import type { Engine } from './engine.ts';
+import { Font } from './fonts.ts';
 import { Graphic } from './media.ts';
 import { spriteAlphaAt } from './renderer.ts';
 import { GameObject } from './object.ts';
@@ -230,6 +231,11 @@ export class TextObj extends GameObject implements Drawable {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const [x1 = 0, y1 = 0, x2 = 800, y2 = 600] = this.rect;
+    const font = this.engine.find(this.prop('FONT'));
+    if (font instanceof Font) {
+      font.drawInRect(ctx, this.text, [x1, y1, x2, y2], this.prop('HJUSTIFY'), this.prop('VJUSTIFY'));
+      return;
+    }
     ctx.save();
     ctx.fillStyle = '#fff';
     ctx.font = '16px sans-serif';
@@ -251,4 +257,3 @@ export class TextObj extends GameObject implements Drawable {
   }
 }
 
-export class Font extends GameObject {}

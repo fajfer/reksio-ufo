@@ -7,6 +7,7 @@ import { argValue, type Arg } from '../script/interpreter.ts';
 import { Value } from '../script/values.ts';
 import { Voice } from './audio.ts';
 import type { Engine } from './engine.ts';
+import { drawTransformed, pivotOf, type FilterTransform } from './filters.ts';
 import { GameObject } from './object.ts';
 import { makeSprite, spriteAlphaAt, type Drawable, type Sprite } from './renderer.ts';
 
@@ -21,6 +22,8 @@ export abstract class Graphic extends GameObject implements Drawable {
   priority: number;
   readonly order: number;
   opacity = 255;
+  /** Set by a linked STATICFILTER (ROTATE). */
+  filterTransform: FilterTransform | null = null;
 
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
@@ -79,20 +82,35 @@ export abstract class Graphic extends GameObject implements Drawable {
     const b = this.bounds();
     if (!b) return;
     if (this.opacity < 255) ctx.globalAlpha = this.opacity / 255;
-    ctx.drawImage(b.sprite.bitmap, b.x, b.y);
+    if (this.filterTransform) drawTransformed(ctx, b.sprite.bitmap, b.x, b.y, b.w, b.h, this.filterTransform);
+    else ctx.drawImage(b.sprite.bitmap, b.x, b.y);
     ctx.globalAlpha = 1;
+  }
+
+  /** Map a screen point into unrotated sprite coordinates. */
+  protected toLocal(px: number, py: number, b: { x: number; y: number; w: number; h: number }): { x: number; y: number } {
+    const t = this.filterTransform;
+    if (!t || !t.angle) return { x: px - b.x, y: py - b.y };
+    const { px: cx, py: cy } = pivotOf(t, b.w, b.h);
+    const a = (-t.angle * Math.PI) / 180;
+    const dx = px - (b.x + cx);
+    const dy = py - (b.y + cy);
+    return { x: cx + dx * Math.cos(a) - dy * Math.sin(a), y: cy + dx * Math.sin(a) + dy * Math.cos(a) };
   }
 
   /** Opaque pixel under (px, py)? */
   hitTest(px: number, py: number): boolean {
     const b = this.bounds();
     if (!b || !this.visible) return false;
-    return spriteAlphaAt(b.sprite, px - b.x, py - b.y) > 0;
+    const l = this.toLocal(px, py, b);
+    return spriteAlphaAt(b.sprite, l.x, l.y) > 0;
   }
 
   inRect(px: number, py: number): boolean {
     const b = this.bounds();
-    return !!b && px >= b.x && py >= b.y && px < b.x + b.w && py < b.y + b.h;
+    if (!b) return false;
+    const l = this.toLocal(px, py, b);
+    return l.x >= 0 && l.y >= 0 && l.x < b.w && l.y < b.h;
   }
 
   init(): void {
@@ -331,6 +349,8 @@ export class Sound extends GameObject {
   private file: string;
   private pendingPlay = false;
   private loading: Promise<void> | null = null;
+  private freq = 0;
+  private volume = 1;
 
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
@@ -343,6 +363,16 @@ export class Sound extends GameObject {
     this.method('PAUSE', () => this.voice?.pause());
     this.method('RESUME', () => this.voice?.resume());
     this.method('ISPLAYING', () => Value.bool(!!this.voice?.playing || this.pendingPlay));
+    // SETFREQ(hz): playback sample rate; the race scales engine pitch with it.
+    this.method('SETFREQ', (a) => {
+      this.freq = int(a[0]);
+      this.voice?.setFrequency(this.freq);
+    });
+    // TODO(unverified): SETVOLUME scale; treated as 0..1000 like the music volume.
+    this.method('SETVOLUME', (a) => {
+      this.volume = Math.max(0, Math.min(1, int(a[0]) / 1000));
+      this.voice?.setVolume(this.volume);
+    });
     this.method('LOAD', (a) => {
       this.voice?.stop();
       this.voice = null;
@@ -364,6 +394,8 @@ export class Sound extends GameObject {
       .then((buf) => {
         this.voice = new Voice(this.engine.audio, buf, this.engine.audio.sfxBus);
         this.voice.onEnded = () => this.signal('ONFINISHED');
+        if (this.freq) this.voice.setFrequency(this.freq);
+        this.voice.setVolume(this.volume);
       })
       .catch((e) => this.engine.warn(`SOUND ${this.name}: ${(e as Error).message}`));
     return this.loading;
