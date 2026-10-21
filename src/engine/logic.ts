@@ -176,13 +176,17 @@ export class Timer extends GameObject {
   }
 }
 
-/** RAND: GET(range[, offset]) -> offset + [0, range). */
+/**
+ * RAND: GET(range) -> [0, range); GET(offset, range) -> offset + [0, range).
+ * Argument order inferred from the scripts: RANDOM^GET(0,2) picks between
+ * events H0/H1 and RANDOM^GET(13,7) sets an FPS. TODO(unverified): DLL.
+ */
 export class Rand extends GameObject {
   constructor(engine: Engine, def: ObjectDef) {
     super(engine, def);
     this.method('GET', (a) => {
-      const range = argValue(a[0]).toInt();
-      const offset = a.length > 1 ? argValue(a[1]).toInt() : 0;
+      const offset = a.length > 1 ? argValue(a[0]).toInt() : 0;
+      const range = argValue(a[a.length > 1 ? 1 : 0]).toInt();
       return Value.int(offset + Math.floor(Math.random() * Math.max(range, 0)));
     });
   }
