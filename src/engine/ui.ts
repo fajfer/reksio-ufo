@@ -5,6 +5,7 @@ import { argValue, type Arg } from '../script/interpreter.ts';
 import { Value } from '../script/values.ts';
 import type { Engine } from './engine.ts';
 import { Graphic } from './media.ts';
+import { spriteAlphaAt } from './renderer.ts';
 import { GameObject } from './object.ts';
 import type { Drawable } from './renderer.ts';
 
@@ -171,18 +172,28 @@ export class CanvasObserver extends GameObject {
       void this.engine.setBackground(str(a[0]));
     });
     this.method('REFRESH', () => undefined);
-    // GETGRAPHICSAT(x, y, alphaTest, minPriority, maxPriority[, ...]) -> name or "NULL".
+    // GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority[, ...]):
+    // CRefreshScreen::getGraphicsAt (0x100d0000) walks all graphics, keeps
+    // those in the priority range (-1 = unbounded), optionally only visible
+    // ones, tests the rect then the pixel alpha, and returns the
+    // highest-priority hit's name.
     this.method('GETGRAPHICSAT', (a) => {
       const x = int(a[0]);
       const y = int(a[1]);
-      const alpha = a.length > 2 ? argValue(a[2]).toBool() : true;
-      const min = a.length > 3 ? int(a[3]) : -Infinity;
-      const max = a.length > 4 ? int(a[4]) : Infinity;
-      for (const d of this.engine.renderer.topmostFirst()) {
-        if (!(d instanceof Graphic) || d.priority < min || d.priority > max) continue;
-        if (alpha ? d.hitTest(x, y) : d.inRect(x, y)) return Value.str(d.name);
+      const visibleOnly = a.length > 2 ? argValue(a[2]).toBool() : true;
+      const min = a.length > 3 ? int(a[3]) : -1;
+      const max = a.length > 4 ? int(a[4]) : -1;
+      let best: Graphic | null = null;
+      for (const d of this.engine.renderer.all()) {
+        if (!(d instanceof Graphic)) continue;
+        if (visibleOnly && !d.visible) continue;
+        if ((min > -1 && d.priority < min) || (max > -1 && d.priority > max)) continue;
+        if (!d.inRect(x, y)) continue;
+        const b = d.bounds();
+        if (!b || spriteAlphaAt(b.sprite, x - b.x, y - b.y) === 0) continue;
+        if (!best || d.priority >= best.priority) best = d;
       }
-      return Value.str('NULL');
+      return Value.str(best ? best.name : 'NULL');
     });
   }
 }

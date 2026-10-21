@@ -194,3 +194,20 @@ string params `[x, y, m]` (CXArray built with `CXString = int`) **[obs]**.
 - SETGATE(l,t,r,b): 0x10002eb0 stores a CXRect at model+0x20 (+0x24 l, +0x28 t, +0x2c r, +0x30 b), in cell units.
 - ISGATEEMPTY(): 0x10002d10 -> false if any code==2 (boulder) in x=l..r, y=t..b inclusive, else true.
 - ISINGATE(x,y): 0x10002ed0 -> CXRect::IsInRect(x,y) (PIKLIB8); ISINGATE(i): 0x10002ef0 -> IsInRect(CXPoint(i%W, i/W)).
+- CANHEROGOTO(i) 0x100039f0 / CANHEROGOTO(x,y) 0x100039d0: true iff
+  `code[i] in {0,1,3,5,8,9}` and NOT ISINGATE(i).
+- CLEAR 0x10003a50: every code = 0 and each cell record reset via 0x100041b0.
+
+### Enemy movement [obs]
+Directions: 0 = left (i-1), 1 = up (i-W), 2 = right (i+1), 3 = down (i+W),
+anything else = stay (step function 0x10003d30, jump table 0x10003d70).
+`enemyCanGo(i)` 0x10003ad0: `(code[i] == 0 or code[i] == 0x63) and not ISINGATE(i)`.
+`canGoDir(i,d)` 0x10003b20 = enemyCanGo(step(i,d)).
+
+CALCENEMYMOVEDIR(i, d) 0x10003c50 (handler 0x100081e0) returns the first of
+- `(d+3)%4` via 0x10003b50 (0->3, 1->0, 3->2, 2->1),
+- `d`,
+- `(d+1)%4` via 0x10003ba0 (0->1, 1->2, 3->0, 2->3),
+- `(d+2)%4` via 0x10003c00 (0->2, 1->3, 3->1, 2->0),
+for which canGoDir holds, else 4. (A wall follower.) Note the turn helpers map
+any value other than 0,1,3 like 2.

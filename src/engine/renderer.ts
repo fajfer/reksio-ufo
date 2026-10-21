@@ -61,6 +61,11 @@ export class Renderer {
     this.background = null;
   }
 
+  /** Every registered drawable, visible or not. */
+  all(): Drawable[] {
+    return [...this.drawables];
+  }
+
   /** Visible drawables from top to bottom, for hit testing. */
   topmostFirst(): Drawable[] {
     return this.sorted().reverse();

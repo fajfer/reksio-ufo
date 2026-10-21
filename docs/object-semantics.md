@@ -137,9 +137,24 @@ signalling object. The port passes the caller's THIS through.
 - `RESET` (0x100b1bd0) zeroes the count and the interval.
 - `SET(n)` (0x100b1bf0) sets the count and restarts the interval.
 
+## CANVAS_OBSERVER^GETGRAPHICSAT
+
+`GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority, …)` goes through
+`CMC_CanvasObserver::getGraphicsAt` (0x1005b4d0) to
+`CRefreshScreen::getGraphicsAt` (0x100d0000). **Observed**, with the flag
+meanings partly **inferred** because the decompiled output is tangled:
+
+- It walks all graphics and keeps those inside the priority range
+  (`-1` = unbounded).
+- When the third argument is true, it keeps only visible objects.
+- It tests the bounding rect, then the pixel alpha.
+- It returns the name of the highest-priority hit.
+
+Scripts only react to positive matches (`VAROBJECT:ONCHANGED^ANIMOPAJAK2`),
+so the not-found value does not matter; the port returns `NULL`.
+
 ## Not yet verified
 
-- GETGRAPHICSAT argument meaning beyond `(x, y, alphaTest, minPriority, maxPriority, …)`.
 - MATRIX (native minigame helper, used by one scene).
 - STATICFILTER / FILTER.
 - Text rendering with bitmap fonts.
