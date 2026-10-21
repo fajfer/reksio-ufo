@@ -40,3 +40,20 @@ test('every IMG decodes to the declared size', { skip: !haveGame }, () => {
     assert.equal(img.rgba.length, img.width * img.height * 4, f);
   }
 });
+
+test('every ANN parses to EOF and its images decode', { skip: !haveGame }, async () => {
+  const { parseAnn, decodeAnnImage } = await import('../src/formats/ann.ts');
+  let images = 0;
+  for (const f of ext('.ann')) {
+    const buf = new Uint8Array(readFileSync(f));
+    const ann = parseAnn(buf);
+    const last = ann.images.at(-1);
+    if (last) assert.equal(last.alphaOffset + last.alphaSize, buf.length, `trailing bytes in ${f}`);
+    for (const img of ann.images) {
+      if (!img.width || !img.height) continue;
+      assert.equal(decodeAnnImage(buf, img).length, img.width * img.height * 4, f);
+      images++;
+    }
+  }
+  assert.ok(images > 9000, `only ${images} images`);
+});

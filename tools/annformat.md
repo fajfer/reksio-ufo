@@ -121,6 +121,15 @@ DeCompress sets the new compression with `(c == 3) ? 4 : 0`. After LZO it also s
 
 **LZO container** (sub_100eaaa0): `u32 decompressed_size, u32 compressed_size, LZO1X stream`.
 
+**Legacy LZW exception:** all 37 compression-2 images in `PRZYGODA/Droga/kura.ann` instead use the
+old `CLZWCompression::decompress` (0x10034a40) container. Its layout is
+`u32 decompressed_size, u32 compressed_size (= len-12), u32 n_codes`, followed by
+LSB-first LZW codes. Codes start 9 bits wide and grow up to 16 bits. 0x100 means
+clear, and the first free code is 0x101. `DeCompress` would pass this data to the LZO
+decoder anyway, so the engine probably shows these frames corrupted, or the file is unused.
+`ann.py` detects this container by its size field and decodes it as LZW. All 74 planes
+come out at exactly their stated sizes.
+
 **RLE16 color** (`CRLECompression::__decompress` 0x10019e80): read a control byte `c` and loop until the output reaches `w*h*2` bytes (`__get_data_size` 0x10026cc0 = w*h*2):
 - `c & 0x80`: read one u16 and repeat it `c & 0x7f` times;
 - otherwise: copy `c` u16 values literally.

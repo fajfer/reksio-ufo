@@ -8,7 +8,21 @@
 // followed by colorSize bytes of RGB565 data and alphaSize bytes of 8-bit alpha.
 
 import { decodeLzoBlob } from './lzo.ts';
+import { decodeLzwBlob } from './lzw.ts';
 import { rleDecompress16, rleDecompress8 } from './rle.ts';
+
+/**
+ * DeCompress always feeds type 2/3 planes to CLZWCompression2 (LZO1X), but a
+ * legacy file carries the older 12-byte-header LZW container instead; tell
+ * them apart by which header's size field matches the blob length.
+ */
+function unwrapDictionary(blob: Uint8Array): Uint8Array {
+  if (blob.length >= 12) {
+    const csize = new DataView(blob.buffer, blob.byteOffset, blob.byteLength).getUint32(4, true);
+    if (csize + 8 !== blob.length && csize + 12 === blob.length) return decodeLzwBlob(blob);
+  }
+  return decodeLzoBlob(blob);
+}
 
 export const Compression = {
   None: 0,
@@ -47,16 +61,14 @@ export function decodeGraphics(
       c = color;
       break;
     case Compression.Lzo:
-      c = decodeLzoBlob(color);
-      if (a) a = decodeLzoBlob(a);
+      c = unwrapDictionary(color);
+      if (a) a = unwrapDictionary(a);
       break;
-    case Compression.LzoRle: {
+    case Compression.LzoRle:
       // DeCompress turns type 3 into type 4 after the LZO pass.
-      const lc = decodeLzoBlob(color);
-      c = rleDecompress16(lc, pixels * 2);
-      if (a) a = rleDecompress8(decodeLzoBlob(a), pixels);
+      c = rleDecompress16(unwrapDictionary(color), pixels * 2);
+      if (a) a = rleDecompress8(unwrapDictionary(a), pixels);
       break;
-    }
     case Compression.Rle:
       // Some type-4 images are stored unpacked; CImage::Load compares the plane
       // size with __get_data_size before deciding, so do the same per plane.

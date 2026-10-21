@@ -80,7 +80,7 @@ def parse_ann(data):
         "bpp": bpp,
         "n_events": n_events,
         "header_name12": _cstr(unk_name12),
-        "unk_0x17": hdr_dword17,
+        "fps": hdr_dword17,                           # -> CAnimo+0x228; Play 0x10008da0 uses 15 if 0
         "unk_0x1b_lowbyte": dword1b & 0xFF,          # -> CAnimo+0x4c
         "flags": dword1b & 0xFFFF00,                 # -> CAnimo+0x208 (_animoflags)
         "opacity": hdr[0x1F],                        # -> CAnimo+0xf8
