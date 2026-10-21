@@ -90,6 +90,21 @@ PRIORITY. `createButton` (0x10055e00) then does the following — **observed**:
   (e.g. KURATOR.ANN: `GADA_START, GADA_1..3, GADA_STOP`).
 - ONSTARTED / ONFINISHED fire with the PLAY parameter.
 
+## THIS inside RUN-called behaviours
+
+`CMC_Behaviour_Runner::run` passes a null object to `CMC_Behaviour::run`,
+so what THIS means inside a behaviour started with `RUN` is unclear. It does
+not matter for this game: of the 39 behaviours that use `THIS^`, none is
+invoked only via RUN/RUNC; all are also event handlers, where THIS is the
+signalling object. The port passes the caller's THIS through.
+
+## RAND
+
+`RANDOM^GET(range)` gives `[0, range)`, and `RANDOM^GET(offset, range)`
+gives `offset + [0, range)` (**inferred** from usage):
+- `RANDOM^GET(0,2)` must pick between the H0/H1 events in Space Invaders;
+- `RANDOM^GET(13,7)` sets an FPS.
+
 ## Not yet verified
 
 - TIMER tick counting and TICKS semantics.

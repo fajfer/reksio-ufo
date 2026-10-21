@@ -122,6 +122,14 @@ export class Browser {
     await this.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
   }
 
+  async keyDown(key: string): Promise<void> {
+    await this.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key === ' ' ? 'Space' : key });
+  }
+
+  async keyUp(key: string): Promise<void> {
+    await this.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key === ' ' ? 'Space' : key });
+  }
+
   async key(key: string): Promise<void> {
     await this.send('Input.dispatchKeyEvent', { type: 'keyDown', key });
     await sleep(60);

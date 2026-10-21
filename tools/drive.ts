@@ -2,7 +2,7 @@
 //
 //   node tools/drive.ts <url> <outDir> [step...]
 //
-// Steps: wait:<ms>  click:<x>,<y>  move:<x>,<y>  key:<Key>  shot:<name>  eval:<js>
+// Steps: wait:<ms>  click:<x>,<y>  move:<x>,<y>  key:<Key>  hold:<Key>,<ms>  shot:<name>  eval:<js>
 // Coordinates are in game pixels (800x600). Console output is printed.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -27,6 +27,13 @@ for (const step of steps) {
   else if (kind === 'click') await browser.click(x, y);
   else if (kind === 'move') await browser.move(x, y);
   else if (kind === 'key') await browser.key(arg);
+  else if (kind === 'hold') {
+    const [k, ms] = arg.split(',');
+    const keyName = k === 'Space' ? ' ' : k;
+    await browser.keyDown(keyName);
+    await sleep(Number(ms));
+    await browser.keyUp(keyName);
+  }
   else if (kind === 'eval') console.log(`[eval] ${JSON.stringify(await browser.eval(arg))}`);
   else if (kind === 'shot') {
     writeFileSync(join(outDir, `${arg}.png`), await browser.screenshot());
