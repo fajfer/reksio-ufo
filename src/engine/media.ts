@@ -1,6 +1,6 @@
 // ANIMO, IMAGE, SOUND, MUSIC.
 
-import { decodeAnnImage, parseAnn, type Ann, type AnnEvent } from '../formats/ann.ts';
+import { decodeAnnImage, parseAnn, type Ann, type AnnEvent, type AnnImageHeader } from '../formats/ann.ts';
 import { decodeImg } from '../formats/img.ts';
 import type { ObjectDef } from '../formats/cnv.ts';
 import { argValue, type Arg } from '../script/interpreter.ts';
@@ -244,8 +244,18 @@ export class Animo extends Graphic {
     this.method('ISPLAYING', (a) =>
       Value.bool(this.playing && !this.paused && (!a.length || this.event?.name === str(a[0]).toUpperCase())),
     );
-    this.method('GETCURRFRAMEPOSX', () => Value.int(this.bounds()?.x ?? this.x));
-    this.method('GETCURRFRAMEPOSY', () => Value.int(this.bounds()?.y ?? this.y));
+    // CMC_Animo_Runner::getPositionX/getPositionY (0x10039c60/0x10039cd0):
+    // with no argument they return CAnimo::GetPosition (0x100092b0) — the
+    // SETPOSITION position plus the current image's offsets and the frame's
+    // dx/dy, i.e. where the current frame is drawn; with an argument they
+    // return CAnimo::getPosition (0x100036a0), the SETPOSITION position.
+    // Scripts sample GETGRAPHICSAT at the no-argument position.
+    this.method('GETPOSITIONX', (a) => Value.int(a.length ? this.x : this.framePosition()?.x ?? 0));
+    this.method('GETPOSITIONY', (a) => Value.int(a.length ? this.y : this.framePosition()?.y ?? 0));
+    // CAnimo::getCurrFramePosition (0x1000c7d0) -> CFrame::GetPosition
+    // (0x10003550): the current image's own x/y offset, no frame dx/dy.
+    this.method('GETCURRFRAMEPOSX', () => Value.int(this.currentImage()?.x ?? 0));
+    this.method('GETCURRFRAMEPOSY', () => Value.int(this.currentImage()?.y ?? 0));
     this.method('GETMAXWIDTH', () => Value.int(Math.max(0, ...(this.ann?.images.map((i) => i.width) ?? [0]))));
     this.method('SETASBUTTON', (a) => {
       this.asButton = a.length ? argValue(a[0]).toBool() : true;
@@ -379,6 +389,26 @@ export class Animo extends Graphic {
     return s;
   }
 
+  private ensureResources(): void {
+    if (!this.ann && this.cloneOf instanceof Animo && this.cloneOf.ann) this.copyResourcesFrom(this.cloneOf);
+  }
+
+  /** Image header of the current frame's image, if a frame is showing. */
+  private currentImage(): AnnImageHeader | null {
+    this.ensureResources();
+    const fr = this.event?.frames[this.frame];
+    const h = fr ? this.ann?.images[fr.image] : undefined;
+    return fr && h ? h : null;
+  }
+
+  /** Current frame's draw position: position + image offsets + dx/dy. */
+  private framePosition(): { x: number; y: number } | null {
+    this.ensureResources();
+    const fr = this.event?.frames[this.frame];
+    const h = fr ? this.ann?.images[fr.image] : undefined;
+    return fr && h ? { x: this.x + h.x + fr.dx, y: this.y + h.y + fr.dy } : null;
+  }
+
   /**
    * An ANIMO resting on a zero-frame event (e.g. NOEVENT) draws nothing but
    * still serves as a BUTTON's RECT (S52 BUTTONINDYK); fall back to frame 0
@@ -394,12 +424,12 @@ export class Animo extends Graphic {
   }
 
   bounds() {
-    if (!this.ann && this.cloneOf instanceof Animo && this.cloneOf.ann) this.copyResourcesFrom(this.cloneOf);
+    this.ensureResources();
     const fr = this.event?.frames[this.frame];
-    if (!fr || !this.ann) return null;
-    const h = this.ann.images[fr.image];
+    const h = fr ? this.ann?.images[fr.image] : undefined;
+    if (!fr || !h) return null;
     const sprite = this.sprite(fr.image);
-    if (!h || !sprite) return null;
+    if (!sprite) return null;
     return { x: this.x + h.x + fr.dx, y: this.y + h.y + fr.dy, w: sprite.width, h: sprite.height, sprite };
   }
 }

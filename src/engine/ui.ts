@@ -186,25 +186,28 @@ export class CanvasObserver extends GameObject {
       void this.engine.setBackground(str(a[0]));
     });
     this.method('REFRESH', () => undefined);
-    // GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority[, ...]):
+    // GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority[, rectOnly]):
     // CRefreshScreen::getGraphicsAt (0x100d0000) walks all graphics, keeps
     // those in the priority range (-1 = unbounded), optionally only visible
-    // ones, tests the rect then the pixel alpha, and returns the
-    // highest-priority hit's name.
+    // ones, tests the rect then — unless the sixth argument is TRUE — the
+    // pixel alpha, and returns the highest-priority hit's name.
     this.method('GETGRAPHICSAT', (a) => {
       const x = int(a[0]);
       const y = int(a[1]);
       const visibleOnly = a.length > 2 ? argValue(a[2]).toBool() : true;
       const min = a.length > 3 ? int(a[3]) : -1;
       const max = a.length > 4 ? int(a[4]) : -1;
+      const rectOnly = a.length > 5 && argValue(a[5]).toBool();
       let best: Graphic | null = null;
       for (const d of this.engine.renderer.all()) {
         if (!(d instanceof Graphic)) continue;
         if (visibleOnly && !d.visible) continue;
         if ((min > -1 && d.priority < min) || (max > -1 && d.priority > max)) continue;
         if (!d.inRect(x, y)) continue;
-        const b = d.bounds();
-        if (!b || spriteAlphaAt(b.sprite, x - b.x, y - b.y) === 0) continue;
+        if (!rectOnly) {
+          const b = d.bounds();
+          if (!b || spriteAlphaAt(b.sprite, x - b.x, y - b.y) === 0) continue;
+        }
         if (!best || d.priority >= best.priority) best = d;
       }
       return Value.str(best ? best.name : 'NULL');

@@ -139,19 +139,49 @@ signalling object. The port passes the caller's THIS through.
 
 ## CANVAS_OBSERVER^GETGRAPHICSAT
 
-`GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority, …)` goes through
-`CMC_CanvasObserver::getGraphicsAt` (0x1005b4d0) to
-`CRefreshScreen::getGraphicsAt` (0x100d0000). **Observed**, with the flag
-meanings partly **inferred** because the decompiled output is tangled:
+`GETGRAPHICSAT(x, y, visibleOnly, minPriority, maxPriority, rectOnly)` goes
+through `CMC_CanvasObserver::getGraphicsAt` (0x1005b4d0) to
+`CRefreshScreen::getGraphicsAt` (0x100d0000). **Observed**:
 
 - It walks all graphics and keeps those inside the priority range
-  (`-1` = unbounded).
-- When the third argument is true, it keeps only visible objects.
-- It tests the bounding rect, then the pixel alpha.
+  (`-1` = unbounded; the runner maps a missing argument to `-1`).
+- When the third argument is true, it keeps only visible objects
+  (the object's flag at +0x138).
+- It tests the bounding rect (`GetBoundingBox`), then the pixel alpha
+  (`GetPixel`), unless the sixth argument is exactly 1, which counts the
+  rect hit without the pixel test.
 - It returns the name of the highest-priority hit.
 
 Scripts only react to positive matches (`VAROBJECT:ONCHANGED^ANIMOPAJAK2`),
 so the not-found value does not matter; the port returns `NULL`.
+
+## ANIMO^GETPOSITIONX / GETPOSITIONY / GETCURRFRAMEPOSX / GETCURRFRAMEPOSY
+
+`CMC_Animo_Runner::getPositionX` (0x10039c60, `getPositionY` 0x10039cd0)
+branches on the argument count:
+
+- With **no argument** it calls `CAnimo::GetPosition` (0x100092b0) — the
+  SETPOSITION position plus the current image's offsets and the frame's
+  dx/dy, i.e. **where the current frame is drawn**. `GetBoundingBox`
+  (0x1000b9b0) builds the same x/y: `[CAnimo+0x214] + image.x + frame.dx`.
+- With **an argument** it calls `CAnimo::getPosition` (0x100036a0), which
+  returns just the SETPOSITION position (`[CAnimo+0x214/0x218]`).
+
+The position the scripts set with `SETPOSITION` is
+`CAnimo::SetGlobalPosition` (0x10005e90): `[0x214] = x - anchor.x`.
+`GETCURRFRAMEPOSX/Y` (0x1003ad80/0x1003adc0) call
+`CAnimo::getCurrFramePosition` (0x1000c7d0) -> `CFrame::GetPosition`
+(0x10003550) — only the current image's own x/y offset (no frame dx/dy);
+both return 0 when no frame has been set.
+
+The other graphic runners (IMAGE 0x10076d60, TEXT 0x100af2c0,
+VIRTUALGRAPHICSOBJECT 0x100bb8b0) always call vtable +0xd8, the plain
+position, regardless of arguments.
+
+Collision scripts depend on this: `16_SpaceInvaders/BEHBURAKMOVE` samples
+`GETGRAPHICSAT(GETPOSITIONX(), GETPOSITIONY(), FALSE, 201, 201, TRUE)` and
+`S33_Meteory/BETICK` derives a probe point as
+`GETPOSITIONX() - GETCURRFRAMEPOSX()`.
 
 ## Not yet verified
 
